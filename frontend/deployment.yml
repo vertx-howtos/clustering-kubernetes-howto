@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        cluster: clustered-app
+    spec:
+      containers:
+        - name: frontend
+          image: clustering-kubernetes/frontend:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Djava.net.preferIPv4Stack=true -Dvertx.infinispan.config=infinispan-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"
+            - name: HTTP_PORT
+              value: "8080"
+          ports:
+            - containerPort: 8080
+            - containerPort: 7800
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            failureThreshold: 1
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /readiness
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
