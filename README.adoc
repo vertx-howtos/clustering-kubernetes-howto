@@ -1,180 +1,431 @@
-= Template and instructions for the Eclipse Vert.x how-tos
-:author: Julien Ponge <julien.ponge@gmail.com>
-:toc:
-
-This repository can be cloned and used as a basis for creating a new Eclipse Vert.x how-to.
-It especially contains the https://jekyllrb.com/[Jekyll] and continuous integration configurations for publishing a how-to as a web page.
-
-== Conventions
-
-Each how-to is a self-contained Git repository of the https://github.com/vertx-howtos[corresponding organisation on GitHub].
-
-The how-to document is written using the https://asciidoctor.org/docs/what-is-asciidoc/[Asciidoc] text format in a file called `README.adoc` at the root of the Git repository.
-
-The accompanying source code is directly at the root of the Git repository.
-For instance a Maven `pom.xml` is co-located with `README.adoc` at the root of the repository.
-
-Projects should preferably have both Maven and Gradle build descriptors.
-An author who doesn't have knowledge of either of the tools can always ask for contributions.
-
-== Structure of a how-to
-
-A how-to is not a guide or a mini-book: it must be as concise as possible.
-
-In practice this means that each how-to must focus on a very narrow topic.
-It also means that the text must not deviate from the topic, and that the chosen example must be as simple as possible.
-
-The structure of a how-to must be as follows.
-
-=== What you will build
-
-- Explain the example scenario from a functional point of view.
-- Explain what the user can see when running the example.
-- Highlight the different pieces of code to be written and how they fit together.
-
-=== What you need
-
-- List all required tools to edit, build and run the how-to.
-- Do not hesitate to point to third-party resources (e.g., if you need Docker, say why you need it and point to its installation documentation).
-
-=== Create a project
-
-- Explain how to create the project.
-- Show the Maven / Gradle build descriptors.
-- For any third-party tool (e.g., running a database with Docker), also have a subsection to explain this.
-
-=== Implementation sections
-
-- Make one or multiple sections to show the implementation.
-- Make use of Asciidoc source code comments to highlight specific parts of the code.
-- The code must be included using https://asciidoctor.org/docs/asciidoc-syntax-quick-reference/#source-code[Asciidoc directives]. Remember that you can include fragments of code by using delimiter tags.
-
-=== Running the application
-
-- Always show the various options to run the application.
-
-=== Summary
-
-- Briefly recapitulate what was covered and learned in the how-to.
-
-=== See also
-
-- If possible, link to other how-tos.
-- If judicious, link to Vert.x or third-party documentation.
-
-== How is the website being rendered?
-
-The website is being rendered using Jekyll and the Asciidoctor extension for Jekyll.
-
-There is a https://github.com/vertx-howtos/vertx-howtos-jekyll-theme[Jekyll theme] published as a Ruby Gem, so every how-to uses a common theme.
-
-=== Asciidoctor attributes
-
-The common theme depends on the following attributes to be set right below the title header:
-
-[source,text]
-----
-= My awesome how-to
+= Deploying clustered Vert.x apps on Kubernetes with Infinispan
 :page-permalink: /
-:page-github: vertx-howtos/my-howto
+:page-github: vertx-howtos/clustering-kubernetes-howto
+
+ifdef::env-github[]
+image:https://travis-ci.org/vertx-howtos/clustering-kubernetes-howto.svg?branch=master["Build Status", link="https://travis-ci.org/vertx-howtos/clustering-kubernetes-howto"]
+endif::env-github[]
+
+This document will show you how to deploy clustered Vert.x apps on Kubernetes with Infinispan.
+
+== What you will build
+
+You will build a clustered Vert.x application which:
+
+* listens to HTTP requests for the `/hello` URI
+* extracts the HTTP query param `name`
+* replies with a greeting such as `"Hello <name> from <pod>` where
+** `<name>` is the query param value
+** `<pod>` is the name of the Kubernetes https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/[pod] that generated the greeting
+
+It consists in two parts (or _microservices_) communicating over the Vert.x _event bus_.
+
+The _frontend_ handles HTTP requests. It extracts the `name` param, sends a request on the bus to the `greetings` address and forwards the reply to the client.
+
+The _backend_ consumes messages sent to the `greetings` address, generates a greeting and replies to the _frontend_.
+
+== What you need
+
+* A text editor or IDE
+* Java 8 higher
+* Maven or Gradle
+* https://kubernetes.io/docs/tasks/tools/install-minikube/[Minikube] or any Kubernetes cluster
+* `kubectl` command-line tool
+
+
+== Create the projects
+
+The code of the _frontend_ and _backend_ projects contain Maven and Gradle build files that are functionally equivalent.
+
+=== Dependencies
+
+Both projects depend on:
+
+* https://vertx.io/docs/vertx-infinispan/java[`Vert.x Infinispan`]
+* https://vertx.io/docs/vertx-web/java[`Vert.x Web`]
+* https://vertx.io/docs/vertx-health-check/java[`Vert.x Health Check`]
+
+Vert.x Infinispan is a cluster manager for Vert.x based on the https://infinispan.org/[Infinispan] in-memory key/value data store.
+In Vert.x a cluster manager is used for various functions. In particular it provides discovery/membership of cluster nodes and stores _event bus_ subscription data.
+
+Vert.x Web is a set of building blocks which make it easy to create HTTP applications.
+
+Vert.x Health Check is a component that standardizes the process of checking the different parts of your system, deducing a status and exposing it.
+
+=== Containerization
+
+To create containers we will use https://github.com/GoogleContainerTools/jib[Jib] because:
+
+- it creates images with distinct layers for dependencies, resources and classes, thus saving build time and deployment time
+- it supports both Maven and Gradle
+- it does not require Docker nor Podman
+
+=== Using Maven
+
+Here is the content of the `pom.xml` file you should be using for the _frontend_:
+
+ifdef::env-github[]
+link:pom.xml[_Frontend_ Maven POM file]
+endif::env-github[]
+ifndef::env-github[]
+[source,xml,role="collapsed"]
+._Frontend_ Maven `pom.xml`
+----
+include::frontend/pom.xml[]
+----
+endif::env-github[]
+
+For the _backend_, the content is similar:
+
+ifdef::env-github[]
+link:pom.xml[_Backend_ Maven POM file]
+endif::env-github[]
+ifndef::env-github[]
+[source,xml,role="collapsed"]
+._Backend_ Maven `pom.xml`
+----
+include::backend/pom.xml[]
+----
+endif::env-github[]
+
+=== Using Gradle
+
+Assuming you use Gradle with the Kotlin DSL, here is what your `build.gradle.kts` file should look like for the _frontend_:
+
+ifdef::env-github[]
+link:build.gradle.kts[_Frontend_ Gradle build file]
+endif::env-github[]
+ifndef::env-github[]
+[source,kotlin,role="collapsed"]
+._Frontend_ Gradle `build.gradle.kts`
+----
+include::frontend/build.gradle.kts[]
+----
+endif::env-github[]
+
+For the _backend_, the content is similar:
+
+ifdef::env-github[]
+link:build.gradle.kts[_Backend_ Gradle build file]
+endif::env-github[]
+ifndef::env-github[]
+[source,kotlin,role="collapsed"]
+._Backend_ Gradle `build.gradle.kts`
+----
+include::backend/build.gradle.kts[]
+----
+endif::env-github[]
+
+== Implement the services
+
+Let's start with the _backend_ service. We will continue with the _frontend_ and then test them on the development machine.
+
+=== _Backend_ service
+
+The _backend_ service is encapsulated in a `BackendVerticle` class.
+
+It is configured with environment variables:
+
+ifdef::env-github[]
+link:backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[BackendVerticle config]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java`
+----
+include::backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[tag=config]
+----
+endif::env-github[]
+
+When the verticle starts, it registers an _event bus_ consumer, sets up a Vert.x Web `Router` and binds an HTTP server:
+
+ifdef::env-github[]
+link:backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[BackendVerticle start]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java`
+----
+include::backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[tag=start]
+----
+endif::env-github[]
+
+The _event bus_ consumer takes messages sent to the `greetings` address and formats a reply:
+
+ifdef::env-github[]
+link:backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[BackendVerticle consumer]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java`
+----
+include::backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[tag=consumer]
+----
+endif::env-github[]
+
+The `Router` exposes health and readiness checks over HTTP:
+
+ifdef::env-github[]
+link:backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[BackendVerticle router]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java`
+----
+include::backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[tag=router]
+----
+endif::env-github[]
+
+TIP: Vert.x Infinispan provides a cluster health check out of the box.
+`io.vertx.ext.cluster.infinispan.ClusterHealthCheck` verifies the underlying Infinispan cluster status.
+
+For local testing, a `main` method is an easy way to start the verticle from the IDE:
+
+ifdef::env-github[]
+link:backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[BackendVerticle main]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java`
+----
+include::backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[tag=main]
+----
+endif::env-github[]
+
+On startup, Vert.x Infinispan searches for an `infinispan.xml` file in the classpath or in the current working directory.
+
+In this project, the configuration file sets the Infinispan transport stack to `tcp`.
+This network stack combines IP multicast for discovery and TCP connections for group messaging:
+
+ifdef::env-github[]
+link:backend/src/main/resources/infinispan.xml[Infinispan Local]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.XML `backend/src/main/resources/infinispan.xml`
+----
+include::backend/src/main/resources/infinispan.xml[]
+----
+endif::env-github[]
+
+The `tcp` stack is fine for testing on our development machine.
+We will see later on how to switch to a stack that is suitable when deploying to Kubernetes.
+
+=== _Frontend_ service
+
+The _frontend_ service is encapsulated in a `FrontendVerticle` class.
+
+It is configured with an environment variable:
+
+ifdef::env-github[]
+link:frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[FrontendVerticle config]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java`
+----
+include::frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[tag=config]
+----
+endif::env-github[]
+
+When the verticle starts, it sets up a Vert.x Web `Router` and binds an HTTP server:
+
+ifdef::env-github[]
+link:frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[FrontendVerticle start]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java`
+----
+include::frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[tag=start]
+----
+endif::env-github[]
+
+The `Router` defines a _GET_ handler for the `/hello` URI, besides it exposes health and readiness checks over HTTP:
+
+ifdef::env-github[]
+link:frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[FrontendVerticle router]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java`
+----
+include::frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[tag=router]
+----
+endif::env-github[]
+
+The HTTP request handler for `/hello` URI extracts the `name` parameter, sends a request over the _event bus_ and forwards the reply to the client:
+
+ifdef::env-github[]
+link:frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[FrontendVerticle handle-request]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java`
+----
+include::frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[tag=handle-request]
+----
+endif::env-github[]
+
+For local testing, a `main` method is an easy way to start the verticle from the IDE:
+
+ifdef::env-github[]
+link:frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[FrontendVerticle main]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.Java `frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java`
+----
+include::frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[tag=main]
+----
+endif::env-github[]
+
+The _frontend_ project, like the _backend_ project, contains an `infinispan.xml` in the `src/main/resources` directory that is suitable for testing on the development machine.
+
+=== Test locally
+
+You can start each service:
+
+* straight from your IDE or,
+* with Maven: `mvn compile exec:java`, or
+* with Gradle: `./gradlew run` (Linux, macOS) or `gradlew run` (Windows).
+
+The _frontend_ service output should print a message similar to the following:
+
+----
+2020-07-16 16:29:39,478 [vert.x-eventloop-thread-2] INFO  i.v.howtos.cluster.FrontendVerticle - Server started and listening on port 8080
 ----
 
-The `page-permalink` attribute ensures that `README.adoc` is rendered as `index.html` rather than `README.adoc`.
-
-The `page-github` attribute must contain the joint GitHub organization and repository so it can properly link to the GitHub repository, provide a direct edition link, and more.
-
-=== Jekyll configuration
-
-The Jekyll configuration shall not have to be tweaked much, here is the basic configuration that we use:
-
-[source,yaml]
-----
-include::_config.yml[]
-----
-
-TIP: When running Jekyll, check the content of the `_site/` folder and adapt the `exclude` items to avoid pushing unnecessary content to the website.
-
-=== Ruby environment
-
-It is strongly recommended to use either https://github.com/rbenv/rbenv[rbenv] or https://rvm.io/[RVM] for your Ruby installation.
-
-You will need https://bundler.io/[Bundler] to install all required dependencies:
+The _backend_:
 
 ----
-$ gem install bundler
+2020-07-16 16:29:40,770 [vert.x-eventloop-thread-2] INFO  i.v.howtos.cluster.BackendVerticle - Server started and listening on port 38621
 ----
 
-You can then let _Bundler_ do the installation work:
+TIP: Take note of the `backend` HTTP server port.
+By default it uses a random port to avoid conflict with the `frontend` HTTP server.
+
+NOTE: The following examples use the https://httpie.org/[HTTPie] command line HTTP client.
+Please refer to the https://httpie.org/doc#installation[installation] documentation if you don't have it installed on your system yet.
+
+First let's send a request to the _frontend_ for the `/hello` URI with the `name` query param set to `Vert.x Clustering`
 
 ----
-$ bundle install
+http :8080/hello name=="Vert.x Clustering"
 ----
 
-From time to time you may also update dependencies:
+You should see something like:
 
 ----
-$ bundle update
+HTTP/1.1 200 OK
+content-length: 36
+
+Hello Vert.x Clustering from unknown
 ----
 
-The dependencies are specified in the `Gemfile` file:
+NOTE: `unknown` is the default pod name used by the _backend_ when the `POD_NAME` environment variable is not defined.
 
-[source,ruby]
-----
-include::Gemfile[]
-----
-
-TIP: Keep the `vertx-howtos-jekyll-theme` dependency up-to-date!
-
-=== Running Jekyll
-
-You can run Jekyll with a full auto-reload experience:
+We can also verify the readiness of the _frontend_:
 
 ----
-$ bundle exec jekyll server --watch --livereload
+http :8080/readiness
+HTTP/1.1 200 OK
+content-length: 65
+content-type: application/json;charset=UTF-8
+
+{
+    "checks": [
+        {
+            "id": "cluster-health",
+            "status": "UP"
+        }
+    ],
+    "outcome": "UP"
+}
 ----
 
-== How is the website being published?
+And the _backend_:
 
-The content first needs to be rendered by Jekyll, then the resulting web site files are being pushed to the repository `gh-pages` branch.
-GitHub pages then exposes the content of the `gh-pages` branch as the website.
-
-While you could do this manually, we automate the process with Travis-CI that also has a special deployment provider to further simplify the process.
-
-=== Travis-CI configuration
-
-Feel-free to customize the `.travis.yml` configuration to check that your how-to code builds and passes tests, but keep the `deploy` tree close to that one:
-
-[source,yaml]
 ----
-include::.travis.yml[]
+http :38621/readiness
+HTTP/1.1 200 OK
+content-length: 65
+content-type: application/json;charset=UTF-8
+
+{
+    "checks": [
+        {
+            "id": "cluster-health",
+            "status": "UP"
+        }
+    ],
+    "outcome": "UP"
 ----
 
-`$GITHUB_TOKEN` is a Travis-CI secret to pass a GitHub API token so that the CI job can push to the `gh-pages` branch.
-It is configured on Travis-CI by a Vert.x project maintainer.
+== Deploy to Kubernetes
 
-Note that we only publish on the `master` branch, but pull-requests can still be tested.
-This also means that we are in a model where the `master` branch is the latest stable revision.
+=== Build containers
 
-=== Travis-CI cron job
+=== Clustered app headless service
 
-It is strongly advised to set-up a cron job in Travis-CI to regularly build a how-to.
+ifdef::env-github[]
+link:headless-service.yml[Headless Service]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.YML `headless-service.yml`
+----
+include::headless-service.yml[]
+----
+endif::env-github[]
 
-Building on a daily basis is a good option to ensure theme updates are quickly reflected.
+=== _Frontend_ deployment and service
 
-== Misc
+ifdef::env-github[]
+link:frontend/deployment.yml[Frontend Deployment]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.YML `frontend/deployment.yml`
+----
+include::frontend/deployment.yml[]
+----
+endif::env-github[]
 
-=== Code style
+ifdef::env-github[]
+link:frontend/service.yml[Frontend Service]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.YML `frontend/service.yml`
+----
+include::frontend/service.yml[]
+----
+endif::env-github[]
 
-There is a `.editorconfig` file in this template repository with the 2-space indentation style that we prefer in Vert.x.
+=== _Backend_ deployment
 
-In any case, favour readability in samples:
+ifdef::env-github[]
+link:backend/deployment.yml[Backend Deployment]
+endif::env-github[]
+ifndef::env-github[]
+[source,java,role="collapsed"]
+.YML `backend/deployment.yml`
+----
+include::backend/deployment.yml[]
+----
+endif::env-github[]
 
-- do not hesitate to use blank lines,
-- do not over-engineer,
-- use explicit short private methods rather than complicated lambdas expressions.
+=== Testing remotely
 
-=== Asciidoc style
+== Summary
 
-Asciidoc does not enforce any style.
+This document covered:
 
-We recommended that you follow the https://asciidoctor.org/docs/asciidoc-recommended-practices/[Asciidoctor recommended practices], and especially the https://asciidoctor.org/docs/asciidoc-recommended-practices/#one-sentence-per-line["One sentence per line"] rule.
+*
+*
+
+== See also
+
+*
+*
