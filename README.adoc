@@ -35,7 +35,7 @@ The _backend_ consumes messages sent to the `greetings` address, generates a gre
 
 == Create the projects
 
-The code of the _frontend_ and _backend_ projects contain Maven and Gradle build files that are functionally equivalent.
+The code of the _frontend_ and _backend_ projects contains Maven and Gradle build files that are functionally equivalent.
 
 === Dependencies
 
@@ -526,7 +526,7 @@ The _backend_ service deployment is similar to the _frontend_ one.
 Notice that in this case:
 
 * 3 replicas should be created
-* the `POD_NAME` environment variable will be set in the container`
+* the `POD_NAME` environment variable will be set in the container
 
 ifdef::env-github[]
 link:backend/deployment.yml[Backend Deployment]
