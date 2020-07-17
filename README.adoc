@@ -577,6 +577,8 @@ You should see something like:
 http://172.17.0.3:30729
 ----
 
+If you don't use Minikube, you can get the external IP with `kubectl get services frontend`.
+
 Then we can send a request to the _frontend_ for the `/hello` URI with the `name` query param set to `Vert.x Clustering`
 
 ----
