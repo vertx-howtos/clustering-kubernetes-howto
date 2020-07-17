@@ -26,7 +26,7 @@ jib {
   to {
     image = "clustering-kubernetes/frontend"
   }
-  will container {
+  container {
     mainClass = "io.vertx.core.Launcher"
     args = listOf("run", verticle, "-cluster")
     ports = listOf("8080", "7800")
