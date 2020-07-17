@@ -65,7 +65,7 @@ To create containers we will use https://github.com/GoogleContainerTools/jib[Jib
 Here is the content of the `pom.xml` file you should be using for the _frontend_:
 
 ifdef::env-github[]
-link:pom.xml[_Frontend_ Maven POM file]
+link:frontend/pom.xml[_Frontend_ Maven POM file]
 endif::env-github[]
 ifndef::env-github[]
 [source,xml,role="collapsed"]
@@ -78,7 +78,7 @@ endif::env-github[]
 For the _backend_, the content is similar:
 
 ifdef::env-github[]
-link:pom.xml[_Backend_ Maven POM file]
+link:backend/pom.xml[_Backend_ Maven POM file]
 endif::env-github[]
 ifndef::env-github[]
 [source,xml,role="collapsed"]
@@ -93,7 +93,7 @@ endif::env-github[]
 Assuming you use Gradle with the Kotlin DSL, here is what your `build.gradle.kts` file should look like for the _frontend_:
 
 ifdef::env-github[]
-link:build.gradle.kts[_Frontend_ Gradle build file]
+link:frontend/build.gradle.kts[_Frontend_ Gradle build file]
 endif::env-github[]
 ifndef::env-github[]
 [source,kotlin,role="collapsed"]
@@ -106,7 +106,7 @@ endif::env-github[]
 For the _backend_, the content is similar:
 
 ifdef::env-github[]
-link:build.gradle.kts[_Backend_ Gradle build file]
+link:backend/build.gradle.kts[_Backend_ Gradle build file]
 endif::env-github[]
 ifndef::env-github[]
 [source,kotlin,role="collapsed"]
@@ -429,7 +429,7 @@ kubectl apply -f headless-service.yml
 Then verify it was succesful:
 
 ----
-kubectl get services clustered-app 
+kubectl get services clustered-app
 ----
 
 You should see something like:
@@ -509,7 +509,7 @@ kubectl apply -f frontend/service.yml
 Verify the service has been created successfully:
 
 ----
-kubectl get services frontend 
+kubectl get services frontend
 ----
 
 You should see something like:
