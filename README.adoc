@@ -58,7 +58,7 @@ To create containers we will use https://github.com/GoogleContainerTools/jib[Jib
 
 - it creates images with distinct layers for dependencies, resources and classes, thus saving build time and deployment time
 - it supports both Maven and Gradle
-- it does not require Docker nor Podman
+- it requires neither Docker nor Podman
 
 === Using Maven
 
@@ -366,7 +366,7 @@ content-type: application/json;charset=UTF-8
 
 First, make sure Minikube has started with `minikube status`.
 
-If you don't use Minikube, verify that `kubectl` is connected to your cluster.
+NOTE: If you don't use Minikube, verify that `kubectl` is connected to your cluster.
 
 === Push container images
 
@@ -386,7 +386,7 @@ Then, within the same shell, we can build the images with Jib:
 
 NOTE: Jib will not use the Docker daemon to build the image but only to push it.
 
-TIP: If you don't use Minikube, please refer to the https://github.com/GoogleContainerTools/jib/tree/master/jib-maven-plugin#configuration[Jib Maven] or https://github.com/GoogleContainerTools/jib/tree/master/jib-gradle-plugin#configuration[Jib Gradle] plugin documentation for details about how to configure them when pushing to a registry.
+NOTE: If you don't use Minikube, please refer to the https://github.com/GoogleContainerTools/jib/tree/master/jib-maven-plugin#configuration[Jib Maven] or https://github.com/GoogleContainerTools/jib/tree/master/jib-gradle-plugin#configuration[Jib Gradle] plugin documentation for details about how to configure them when pushing to a registry.
 
 === Clustered app headless service
 
@@ -486,7 +486,7 @@ frontend-deployment-8cfd4d966-lpvsb   1/1     Running   0          4m58s
 frontend-deployment-8cfd4d966-tctgv   1/1     Running   0          4m58s
 ----
 
-We also need a service to expose our pods to the outside world and load-balance the HTTP traffic.
+We also need a service to load-balance the HTTP traffic.
 Pods will be selected by the label `app:frontend` that was defined in the deployment:
 
 ifdef::env-github[]
@@ -518,6 +518,31 @@ You should see something like:
 NAME       TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
 frontend   LoadBalancer   10.106.16.88   <pending>     80:30729/TCP   62s
 ----
+
+If you use Minikube, open another terminal window and run:
+
+----
+minikube tunnel
+----
+
+https://minikube.sigs.k8s.io/docs/handbook/accessing/#using-minikube-tunnel[Minikube tunnel] runs as a separate process and exposes the service to the host operating system.
+
+If you run `kubectl get services frontend` again, then the external IP should be set:
+
+----
+NAME       TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)        AGE
+frontend   LoadBalancer   10.100.254.64   10.100.254.64   80:30660/TCP   30m
+----
+
+TIP: Take note of the external IP.
+
+[IMPORTANT]
+==== 
+Minikube tunnel requires privilege escalation.
+If you are not granted to do this, you can still access the service via the _NodePort_ with `minikube service --url frontend`.
+====
+
+NOTE: If you don't use Minikube and no external IP has been assigned to your service, please refer to your cluster documentation.
 
 === _Backend_ deployment
 
@@ -565,24 +590,10 @@ frontend-deployment-8cfd4d966-tctgv   1/1     Running   0          15m
 
 === Testing remotely
 
-First, let's ask Minikube to give the url of the `frontend` service from the development machine:
+We can now send a request to the _frontend_ for the `/hello` URI with the `name` query param set to `Vert.x Clustering`
 
 ----
-minikube service --url frontend
-----
-
-You should see something like:
-
-----
-http://172.17.0.3:30729
-----
-
-If you don't use Minikube, you can get the external IP with `kubectl get services frontend`.
-
-Then we can send a request to the _frontend_ for the `/hello` URI with the `name` query param set to `Vert.x Clustering`
-
-----
-http 172.17.0.3:30729/hello name=="Vert.x Clustering"
+http 10.100.254.64/hello name=="Vert.x Clustering"
 ----
 
 You should see something like:
