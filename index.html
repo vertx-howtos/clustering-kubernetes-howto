@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>Deploying clustered Vert.x apps on Kubernetes with Infinispan | Eclipse Vert.x how-to</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr"
+    crossorigin="anonymous">
+  <link rel="icon" type="image/svg+xml" href="assets/images/vertx-square.svg">
+</head>
+
+<body>
+
+
+<nav class="navbar navbar-expand-lg sticky-top navbar-dark bg-purple mb-4 shadow-sm">
+  <a class="navbar-brand" href="/">
+    <img src="assets/images/vertx-square.svg" alt="Vert.x" width="40" height="40">
+    &nbsp; Eclipse Vert.x how-to
+  </a>
+  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav"
+    aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="navbarNav">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" href="https://vertx.io/docs/"><i class="fas fa-lg fa-drafting-compass"></i> Vert.x docs</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="https://github.com/vertx-howtos/clustering-kubernetes-howto"><i class="fab fa-lg fa-github"></i> Source
+          code</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="https://github.com/vertx-howtos/clustering-kubernetes-howto/edit/master/README.adoc"><i
+            class="far fa-lg fa-edit"></i>
+          Edit this</a>
+      </li>
+    </ul>
+  </div>
+</nav>
+
+<div class="container">
+
+  <div class="row">
+    <div class="col">
+      <h1>Deploying clustered Vert.x apps on Kubernetes with Infinispan</h1>
+      <div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>This document will show you how to deploy clustered Vert.x apps on Kubernetes with Infinispan.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="what-you-will-build">What you will build</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>You will build a clustered Vert.x application which:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>listens to HTTP requests for the <code>/hello</code> URI</p>
+</li>
+<li>
+<p>extracts the HTTP query param <code>name</code></p>
+</li>
+<li>
+<p>replies with a greeting such as <code>"Hello &lt;name&gt; from &lt;pod&gt;</code> where</p>
+<div class="ulist">
+<ul>
+<li>
+<p><code>&lt;name&gt;</code> is the query param value</p>
+</li>
+<li>
+<p><code>&lt;pod&gt;</code> is the name of the Kubernetes <a href="https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/">pod</a> that generated the greeting</p>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>It consists in two parts (or <em>microservices</em>) communicating over the Vert.x <em>event bus</em>.</p>
+</div>
+<div class="paragraph">
+<p>The <em>frontend</em> handles HTTP requests. It extracts the <code>name</code> param, sends a request on the bus to the <code>greetings</code> address and forwards the reply to the client.</p>
+</div>
+<div class="paragraph">
+<p>The <em>backend</em> consumes messages sent to the <code>greetings</code> address, generates a greeting and replies to the <em>frontend</em>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="what-you-need">What you need</h2>
+<div class="sectionbody">
+<div class="ulist">
+<ul>
+<li>
+<p>A text editor or IDE</p>
+</li>
+<li>
+<p>Java 8 higher</p>
+</li>
+<li>
+<p>Maven or Gradle</p>
+</li>
+<li>
+<p><a href="https://kubernetes.io/docs/tasks/tools/install-minikube/">Minikube</a> or any Kubernetes cluster</p>
+</li>
+<li>
+<p><code>kubectl</code> command-line tool</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="create-the-projects">Create the projects</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The code of the <em>frontend</em> and <em>backend</em> projects contains Maven and Gradle build files that are functionally equivalent.</p>
+</div>
+<div class="sect2">
+<h3 id="dependencies">Dependencies</h3>
+<div class="paragraph">
+<p>Both projects depend on:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><a href="https://vertx.io/docs/vertx-infinispan/java"><code>Vert.x Infinispan</code></a></p>
+</li>
+<li>
+<p><a href="https://vertx.io/docs/vertx-web/java"><code>Vert.x Web</code></a></p>
+</li>
+<li>
+<p><a href="https://vertx.io/docs/vertx-health-check/java"><code>Vert.x Health Check</code></a></p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Vert.x Infinispan is a cluster manager for Vert.x based on the <a href="https://infinispan.org/">Infinispan</a> in-memory key/value data store.
+In Vert.x a cluster manager is used for various functions. In particular it provides discovery/membership of cluster nodes and stores <em>event bus</em> subscription data.</p>
+</div>
+<div class="paragraph">
+<p>Vert.x Web is a set of building blocks which make it easy to create HTTP applications.</p>
+</div>
+<div class="paragraph">
+<p>Vert.x Health Check is a component that standardizes the process of checking the different parts of your system, deducing a status and exposing it.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="containerization">Containerization</h3>
+<div class="paragraph">
+<p>To create containers we will use <a href="https://github.com/GoogleContainerTools/jib">Jib</a> because:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>it creates images with distinct layers for dependencies, resources and classes, thus saving build time and deployment time</p>
+</li>
+<li>
+<p>it supports both Maven and Gradle</p>
+</li>
+<li>
+<p>it requires neither Docker nor Podman</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="using-maven">Using Maven</h3>
+<div class="paragraph">
+<p>Here is the content of the <code>pom.xml</code> file you should be using for the <em>frontend</em>:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title"><em>Frontend</em> Maven <code>pom.xml</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="xml"><span style="color: #999999;font-weight: bold">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
+<span style="color: #000080">&lt;project</span> <span style="color: #008080">xmlns=</span><span style="color: #d14">"http://maven.apache.org/POM/4.0.0"</span>
+         <span style="color: #008080">xmlns:xsi=</span><span style="color: #d14">"http://www.w3.org/2001/XMLSchema-instance"</span>
+         <span style="color: #008080">xsi:schemaLocation=</span><span style="color: #d14">"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"</span><span style="color: #000080">&gt;</span>
+  <span style="color: #000080">&lt;modelVersion&gt;</span>4.0.0<span style="color: #000080">&lt;/modelVersion&gt;</span>
+
+  <span style="color: #000080">&lt;groupId&gt;</span>io.vertx.howtos<span style="color: #000080">&lt;/groupId&gt;</span>
+  <span style="color: #000080">&lt;artifactId&gt;</span>clustering-kubernetes-frontend<span style="color: #000080">&lt;/artifactId&gt;</span>
+  <span style="color: #000080">&lt;version&gt;</span>1.0-SNAPSHOT<span style="color: #000080">&lt;/version&gt;</span>
+
+  <span style="color: #000080">&lt;properties&gt;</span>
+    <span style="color: #000080">&lt;maven.compiler.source&gt;</span>1.8<span style="color: #000080">&lt;/maven.compiler.source&gt;</span>
+    <span style="color: #000080">&lt;maven.compiler.target&gt;</span>1.8<span style="color: #000080">&lt;/maven.compiler.target&gt;</span>
+    <span style="color: #000080">&lt;project.build.sourceEncoding&gt;</span>UTF-8<span style="color: #000080">&lt;/project.build.sourceEncoding&gt;</span>
+    <span style="color: #000080">&lt;verticle&gt;</span>io.vertx.howtos.cluster.FrontendVerticle<span style="color: #000080">&lt;/verticle&gt;</span>
+  <span style="color: #000080">&lt;/properties&gt;</span>
+
+  <span style="color: #000080">&lt;dependencyManagement&gt;</span>
+    <span style="color: #000080">&lt;dependencies&gt;</span>
+      <span style="color: #000080">&lt;dependency&gt;</span>
+        <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
+        <span style="color: #000080">&lt;artifactId&gt;</span>vertx-stack-depchain<span style="color: #000080">&lt;/artifactId&gt;</span>
+        <span style="color: #000080">&lt;version&gt;</span>4.0.0-milestone5<span style="color: #000080">&lt;/version&gt;</span>
+        <span style="color: #000080">&lt;type&gt;</span>pom<span style="color: #000080">&lt;/type&gt;</span>
+        <span style="color: #000080">&lt;scope&gt;</span>import<span style="color: #000080">&lt;/scope&gt;</span>
+      <span style="color: #000080">&lt;/dependency&gt;</span>
+    <span style="color: #000080">&lt;/dependencies&gt;</span>
+  <span style="color: #000080">&lt;/dependencyManagement&gt;</span>
+
+  <span style="color: #000080">&lt;dependencies&gt;</span>
+    <span style="color: #000080">&lt;dependency&gt;</span>
+      <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
+      <span style="color: #000080">&lt;artifactId&gt;</span>vertx-web<span style="color: #000080">&lt;/artifactId&gt;</span>
+    <span style="color: #000080">&lt;/dependency&gt;</span>
+    <span style="color: #000080">&lt;dependency&gt;</span>
+      <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
+      <span style="color: #000080">&lt;artifactId&gt;</span>vertx-infinispan<span style="color: #000080">&lt;/artifactId&gt;</span>
+    <span style="color: #000080">&lt;/dependency&gt;</span>
+    <span style="color: #000080">&lt;dependency&gt;</span>
+      <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
+      <span style="color: #000080">&lt;artifactId&gt;</span>vertx-health-check<span style="color: #000080">&lt;/artifactId&gt;</span>
+    <span style="color: #000080">&lt;/dependency&gt;</span>
+    <span style="color: #000080">&lt;dependency&gt;</span>
+      <span style="color: #000080">&lt;groupId&gt;</span>ch.qos.logback<span style="color: #000080">&lt;/groupId&gt;</span>
+      <span style="color: #000080">&lt;artifactId&gt;</span>logback-classic<span style="color: #000080">&lt;/artifactId&gt;</span>
+      <span style="color: #000080">&lt;version&gt;</span>1.2.3<span style="color: #000080">&lt;/version&gt;</span>
+    <span style="color: #000080">&lt;/dependency&gt;</span>
+  <span style="color: #000080">&lt;/dependencies&gt;</span>
+
+  <span style="color: #000080">&lt;build&gt;</span>
+    <span style="color: #000080">&lt;plugins&gt;</span>
+      <span style="color: #000080">&lt;plugin&gt;</span>
+        <span style="color: #000080">&lt;groupId&gt;</span>org.codehaus.mojo<span style="color: #000080">&lt;/groupId&gt;</span>
+        <span style="color: #000080">&lt;artifactId&gt;</span>exec-maven-plugin<span style="color: #000080">&lt;/artifactId&gt;</span>
+        <span style="color: #000080">&lt;version&gt;</span>1.5.0<span style="color: #000080">&lt;/version&gt;</span>
+        <span style="color: #000080">&lt;configuration&gt;</span>
+          <span style="color: #000080">&lt;mainClass&gt;</span>${verticle}<span style="color: #000080">&lt;/mainClass&gt;</span>
+        <span style="color: #000080">&lt;/configuration&gt;</span>
+      <span style="color: #000080">&lt;/plugin&gt;</span>
+      <span style="color: #000080">&lt;plugin&gt;</span>
+        <span style="color: #000080">&lt;groupId&gt;</span>com.google.cloud.tools<span style="color: #000080">&lt;/groupId&gt;</span>
+        <span style="color: #000080">&lt;artifactId&gt;</span>jib-maven-plugin<span style="color: #000080">&lt;/artifactId&gt;</span>
+        <span style="color: #000080">&lt;version&gt;</span>2.4.0<span style="color: #000080">&lt;/version&gt;</span>
+        <span style="color: #000080">&lt;configuration&gt;</span>
+          <span style="color: #000080">&lt;to&gt;</span>
+            <span style="color: #000080">&lt;image&gt;</span>clustering-kubernetes/frontend<span style="color: #000080">&lt;/image&gt;</span>
+          <span style="color: #000080">&lt;/to&gt;</span>
+          <span style="color: #000080">&lt;container&gt;</span>
+            <span style="color: #000080">&lt;mainClass&gt;</span>io.vertx.core.Launcher<span style="color: #000080">&lt;/mainClass&gt;</span>
+            <span style="color: #000080">&lt;args&gt;</span>
+              <span style="color: #000080">&lt;arg&gt;</span>run<span style="color: #000080">&lt;/arg&gt;</span>
+              <span style="color: #000080">&lt;arg&gt;</span>${verticle}<span style="color: #000080">&lt;/arg&gt;</span>
+              <span style="color: #000080">&lt;arg&gt;</span>-cluster<span style="color: #000080">&lt;/arg&gt;</span>
+            <span style="color: #000080">&lt;/args&gt;</span>
+            <span style="color: #000080">&lt;ports&gt;</span>
+              <span style="color: #000080">&lt;port&gt;</span>8080<span style="color: #000080">&lt;/port&gt;</span>
+              <span style="color: #000080">&lt;port&gt;</span>7800<span style="color: #000080">&lt;/port&gt;</span>
+            <span style="color: #000080">&lt;/ports&gt;</span>
+          <span style="color: #000080">&lt;/container&gt;</span>
+        <span style="color: #000080">&lt;/configuration&gt;</span>
+      <span style="color: #000080">&lt;/plugin&gt;</span>
+    <span style="color: #000080">&lt;/plugins&gt;</span>
+  <span style="color: #000080">&lt;/build&gt;</span>
+
+<span style="color: #000080">&lt;/project&gt;</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>For the <em>backend</em>, the content is similar:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title"><em>Backend</em> Maven <code>pom.xml</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="xml"><span style="color: #999999;font-weight: bold">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
+<span style="color: #000080">&lt;project</span> <span style="color: #008080">xmlns=</span><span style="color: #d14">"http://maven.apache.org/POM/4.0.0"</span>
+         <span style="color: #008080">xmlns:xsi=</span><span style="color: #d14">"http://www.w3.org/2001/XMLSchema-instance"</span>
+         <span style="color: #008080">xsi:schemaLocation=</span><span style="color: #d14">"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"</span><span style="color: #000080">&gt;</span>
+  <span style="color: #000080">&lt;modelVersion&gt;</span>4.0.0<span style="color: #000080">&lt;/modelVersion&gt;</span>
+
+  <span style="color: #000080">&lt;groupId&gt;</span>io.vertx.howtos<span style="color: #000080">&lt;/groupId&gt;</span>
+  <span style="color: #000080">&lt;artifactId&gt;</span>clustering-kubernetes-backend<span style="color: #000080">&lt;/artifactId&gt;</span>
+  <span style="color: #000080">&lt;version&gt;</span>1.0-SNAPSHOT<span style="color: #000080">&lt;/version&gt;</span>
+
+  <span style="color: #000080">&lt;properties&gt;</span>
+    <span style="color: #000080">&lt;maven.compiler.source&gt;</span>1.8<span style="color: #000080">&lt;/maven.compiler.source&gt;</span>
+    <span style="color: #000080">&lt;maven.compiler.target&gt;</span>1.8<span style="color: #000080">&lt;/maven.compiler.target&gt;</span>
+    <span style="color: #000080">&lt;project.build.sourceEncoding&gt;</span>UTF-8<span style="color: #000080">&lt;/project.build.sourceEncoding&gt;</span>
+    <span style="color: #000080">&lt;verticle&gt;</span>io.vertx.howtos.cluster.BackendVerticle<span style="color: #000080">&lt;/verticle&gt;</span>
+  <span style="color: #000080">&lt;/properties&gt;</span>
+
+  <span style="color: #000080">&lt;dependencyManagement&gt;</span>
+    <span style="color: #000080">&lt;dependencies&gt;</span>
+      <span style="color: #000080">&lt;dependency&gt;</span>
+        <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
+        <span style="color: #000080">&lt;artifactId&gt;</span>vertx-stack-depchain<span style="color: #000080">&lt;/artifactId&gt;</span>
+        <span style="color: #000080">&lt;version&gt;</span>4.0.0-milestone5<span style="color: #000080">&lt;/version&gt;</span>
+        <span style="color: #000080">&lt;type&gt;</span>pom<span style="color: #000080">&lt;/type&gt;</span>
+        <span style="color: #000080">&lt;scope&gt;</span>import<span style="color: #000080">&lt;/scope&gt;</span>
+      <span style="color: #000080">&lt;/dependency&gt;</span>
+    <span style="color: #000080">&lt;/dependencies&gt;</span>
+  <span style="color: #000080">&lt;/dependencyManagement&gt;</span>
+
+  <span style="color: #000080">&lt;dependencies&gt;</span>
+    <span style="color: #000080">&lt;dependency&gt;</span>
+      <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
+      <span style="color: #000080">&lt;artifactId&gt;</span>vertx-web<span style="color: #000080">&lt;/artifactId&gt;</span>
+    <span style="color: #000080">&lt;/dependency&gt;</span>
+    <span style="color: #000080">&lt;dependency&gt;</span>
+      <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
+      <span style="color: #000080">&lt;artifactId&gt;</span>vertx-infinispan<span style="color: #000080">&lt;/artifactId&gt;</span>
+    <span style="color: #000080">&lt;/dependency&gt;</span>
+    <span style="color: #000080">&lt;dependency&gt;</span>
+      <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
+      <span style="color: #000080">&lt;artifactId&gt;</span>vertx-health-check<span style="color: #000080">&lt;/artifactId&gt;</span>
+    <span style="color: #000080">&lt;/dependency&gt;</span>
+    <span style="color: #000080">&lt;dependency&gt;</span>
+      <span style="color: #000080">&lt;groupId&gt;</span>ch.qos.logback<span style="color: #000080">&lt;/groupId&gt;</span>
+      <span style="color: #000080">&lt;artifactId&gt;</span>logback-classic<span style="color: #000080">&lt;/artifactId&gt;</span>
+      <span style="color: #000080">&lt;version&gt;</span>1.2.3<span style="color: #000080">&lt;/version&gt;</span>
+    <span style="color: #000080">&lt;/dependency&gt;</span>
+  <span style="color: #000080">&lt;/dependencies&gt;</span>
+
+  <span style="color: #000080">&lt;build&gt;</span>
+    <span style="color: #000080">&lt;plugins&gt;</span>
+      <span style="color: #000080">&lt;plugin&gt;</span>
+        <span style="color: #000080">&lt;groupId&gt;</span>org.codehaus.mojo<span style="color: #000080">&lt;/groupId&gt;</span>
+        <span style="color: #000080">&lt;artifactId&gt;</span>exec-maven-plugin<span style="color: #000080">&lt;/artifactId&gt;</span>
+        <span style="color: #000080">&lt;version&gt;</span>1.5.0<span style="color: #000080">&lt;/version&gt;</span>
+        <span style="color: #000080">&lt;configuration&gt;</span>
+          <span style="color: #000080">&lt;mainClass&gt;</span>${verticle}<span style="color: #000080">&lt;/mainClass&gt;</span>
+        <span style="color: #000080">&lt;/configuration&gt;</span>
+      <span style="color: #000080">&lt;/plugin&gt;</span>
+      <span style="color: #000080">&lt;plugin&gt;</span>
+        <span style="color: #000080">&lt;groupId&gt;</span>com.google.cloud.tools<span style="color: #000080">&lt;/groupId&gt;</span>
+        <span style="color: #000080">&lt;artifactId&gt;</span>jib-maven-plugin<span style="color: #000080">&lt;/artifactId&gt;</span>
+        <span style="color: #000080">&lt;version&gt;</span>2.4.0<span style="color: #000080">&lt;/version&gt;</span>
+        <span style="color: #000080">&lt;configuration&gt;</span>
+          <span style="color: #000080">&lt;to&gt;</span>
+            <span style="color: #000080">&lt;image&gt;</span>clustering-kubernetes/backend<span style="color: #000080">&lt;/image&gt;</span>
+          <span style="color: #000080">&lt;/to&gt;</span>
+          <span style="color: #000080">&lt;container&gt;</span>
+            <span style="color: #000080">&lt;mainClass&gt;</span>io.vertx.core.Launcher<span style="color: #000080">&lt;/mainClass&gt;</span>
+            <span style="color: #000080">&lt;args&gt;</span>
+              <span style="color: #000080">&lt;arg&gt;</span>run<span style="color: #000080">&lt;/arg&gt;</span>
+              <span style="color: #000080">&lt;arg&gt;</span>${verticle}<span style="color: #000080">&lt;/arg&gt;</span>
+              <span style="color: #000080">&lt;arg&gt;</span>-cluster<span style="color: #000080">&lt;/arg&gt;</span>
+            <span style="color: #000080">&lt;/args&gt;</span>
+            <span style="color: #000080">&lt;ports&gt;</span>
+              <span style="color: #000080">&lt;port&gt;</span>8080<span style="color: #000080">&lt;/port&gt;</span>
+              <span style="color: #000080">&lt;port&gt;</span>7800<span style="color: #000080">&lt;/port&gt;</span>
+            <span style="color: #000080">&lt;/ports&gt;</span>
+          <span style="color: #000080">&lt;/container&gt;</span>
+        <span style="color: #000080">&lt;/configuration&gt;</span>
+      <span style="color: #000080">&lt;/plugin&gt;</span>
+    <span style="color: #000080">&lt;/plugins&gt;</span>
+  <span style="color: #000080">&lt;/build&gt;</span>
+
+<span style="color: #000080">&lt;/project&gt;</span></code></pre>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="using-gradle">Using Gradle</h3>
+<div class="paragraph">
+<p>Assuming you use Gradle with the Kotlin DSL, here is what your <code>build.gradle.kts</code> file should look like for the <em>frontend</em>:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title"><em>Frontend</em> Gradle <code>build.gradle.kts</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="kotlin"><span style="color: #990000;font-weight: bold">plugins</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="background-color: #f8f8f8">java</span>
+  <span style="background-color: #f8f8f8">application</span>
+  <span style="color: #990000;font-weight: bold">id</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"com.google.cloud.tools.jib"</span><span style="background-color: #f8f8f8">)</span> <span style="background-color: #f8f8f8">version</span> <span style="color: #d14">"2.4.0"</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="color: #990000;font-weight: bold">repositories</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="color: #990000;font-weight: bold">mavenCentral</span><span style="background-color: #f8f8f8">()</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">vertxVersion</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"4.0.0-milestone5"</span>
+<span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">verticle</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"io.vertx.howtos.cluster.FrontendVerticle"</span>
+
+<span style="color: #990000;font-weight: bold">dependencies</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="color: #990000;font-weight: bold">implementation</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"io.vertx:vertx-web:${vertxVersion}"</span><span style="background-color: #f8f8f8">)</span>
+  <span style="color: #990000;font-weight: bold">implementation</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"io.vertx:vertx-infinispan:${vertxVersion}"</span><span style="background-color: #f8f8f8">)</span>
+  <span style="color: #990000;font-weight: bold">implementation</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"io.vertx:vertx-health-check:${vertxVersion}"</span><span style="background-color: #f8f8f8">)</span>
+  <span style="color: #990000;font-weight: bold">implementation</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"ch.qos.logback:logback-classic:1.2.3"</span><span style="background-color: #f8f8f8">)</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="color: #990000;font-weight: bold">application</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="background-color: #f8f8f8">mainClassName</span> <span style="background-color: #f8f8f8">=</span> <span style="background-color: #f8f8f8">verticle</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="color: #990000;font-weight: bold">jib</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="color: #990000;font-weight: bold">to</span> <span style="background-color: #f8f8f8">{</span>
+    <span style="background-color: #f8f8f8">image</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"clustering-kubernetes/frontend"</span>
+  <span style="background-color: #f8f8f8">}</span>
+  <span style="color: #990000;font-weight: bold">container</span> <span style="background-color: #f8f8f8">{</span>
+    <span style="background-color: #f8f8f8">mainClass</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"io.vertx.core.Launcher"</span>
+    <span style="background-color: #f8f8f8">args</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #990000;font-weight: bold">listOf</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"run"</span><span style="background-color: #f8f8f8">,</span> <span style="background-color: #f8f8f8">verticle</span><span style="background-color: #f8f8f8">,</span> <span style="color: #d14">"-cluster"</span><span style="background-color: #f8f8f8">)</span>
+    <span style="background-color: #f8f8f8">ports</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #990000;font-weight: bold">listOf</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"8080"</span><span style="background-color: #f8f8f8">,</span> <span style="color: #d14">"7800"</span><span style="background-color: #f8f8f8">)</span>
+  <span style="background-color: #f8f8f8">}</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="background-color: #f8f8f8">tasks</span><span style="background-color: #f8f8f8">.</span><span style="color: #990000;font-weight: bold">wrapper</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="background-color: #f8f8f8">gradleVersion</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"5.2"</span>
+<span style="background-color: #f8f8f8">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>For the <em>backend</em>, the content is similar:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title"><em>Backend</em> Gradle <code>build.gradle.kts</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="kotlin"><span style="color: #990000;font-weight: bold">plugins</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="background-color: #f8f8f8">java</span>
+  <span style="background-color: #f8f8f8">application</span>
+  <span style="color: #990000;font-weight: bold">id</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"com.google.cloud.tools.jib"</span><span style="background-color: #f8f8f8">)</span> <span style="background-color: #f8f8f8">version</span> <span style="color: #d14">"2.4.0"</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="color: #990000;font-weight: bold">repositories</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="color: #990000;font-weight: bold">mavenCentral</span><span style="background-color: #f8f8f8">()</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">vertxVersion</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"4.0.0-milestone5"</span>
+<span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">verticle</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"io.vertx.howtos.cluster.BackendVerticle"</span>
+
+<span style="color: #990000;font-weight: bold">dependencies</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="color: #990000;font-weight: bold">implementation</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"io.vertx:vertx-web:${vertxVersion}"</span><span style="background-color: #f8f8f8">)</span>
+  <span style="color: #990000;font-weight: bold">implementation</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"io.vertx:vertx-infinispan:${vertxVersion}"</span><span style="background-color: #f8f8f8">)</span>
+  <span style="color: #990000;font-weight: bold">implementation</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"io.vertx:vertx-health-check:${vertxVersion}"</span><span style="background-color: #f8f8f8">)</span>
+  <span style="color: #990000;font-weight: bold">implementation</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"ch.qos.logback:logback-classic:1.2.3"</span><span style="background-color: #f8f8f8">)</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="color: #990000;font-weight: bold">application</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="background-color: #f8f8f8">mainClassName</span> <span style="background-color: #f8f8f8">=</span> <span style="background-color: #f8f8f8">verticle</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="color: #990000;font-weight: bold">jib</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="color: #990000;font-weight: bold">to</span> <span style="background-color: #f8f8f8">{</span>
+    <span style="background-color: #f8f8f8">image</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"clustering-kubernetes/backend"</span>
+  <span style="background-color: #f8f8f8">}</span>
+  <span style="color: #990000;font-weight: bold">container</span> <span style="background-color: #f8f8f8">{</span>
+    <span style="background-color: #f8f8f8">mainClass</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"io.vertx.core.Launcher"</span>
+    <span style="background-color: #f8f8f8">args</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #990000;font-weight: bold">listOf</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"run"</span><span style="background-color: #f8f8f8">,</span> <span style="background-color: #f8f8f8">verticle</span><span style="background-color: #f8f8f8">,</span> <span style="color: #d14">"-cluster"</span><span style="background-color: #f8f8f8">)</span>
+    <span style="background-color: #f8f8f8">ports</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #990000;font-weight: bold">listOf</span><span style="background-color: #f8f8f8">(</span><span style="color: #d14">"8080"</span><span style="background-color: #f8f8f8">,</span> <span style="color: #d14">"7800"</span><span style="background-color: #f8f8f8">)</span>
+  <span style="background-color: #f8f8f8">}</span>
+<span style="background-color: #f8f8f8">}</span>
+
+<span style="background-color: #f8f8f8">tasks</span><span style="background-color: #f8f8f8">.</span><span style="color: #990000;font-weight: bold">wrapper</span> <span style="background-color: #f8f8f8">{</span>
+  <span style="background-color: #f8f8f8">gradleVersion</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"5.2"</span>
+<span style="background-color: #f8f8f8">}</span></code></pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="implement-the-services">Implement the services</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Let&#8217;s start with the <em>backend</em> service. We will continue with the <em>frontend</em> and then test them on the development machine.</p>
+</div>
+<div class="sect2">
+<h3 id="backend-service"><em>Backend</em> service</h3>
+<div class="paragraph">
+<p>The <em>backend</em> service is encapsulated in a <code>BackendVerticle</code> class.</p>
+</div>
+<div class="paragraph">
+<p>It is configured with environment variables:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #000000;font-weight: bold">private</span> <span style="color: #000000;font-weight: bold">static</span> <span style="color: #000000;font-weight: bold">final</span> <span style="color: #445588;font-weight: bold">int</span> <span style="color: #008080">HTTP_PORT</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">Integer</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">parseInt</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">System</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">getenv</span><span style="color: #000000;font-weight: bold">().</span><span style="color: #008080">getOrDefault</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"HTTP_PORT"</span><span style="color: #000000;font-weight: bold">,</span> <span style="color: #d14">"0"</span><span style="color: #000000;font-weight: bold">));</span>
+  <span style="color: #000000;font-weight: bold">private</span> <span style="color: #000000;font-weight: bold">static</span> <span style="color: #000000;font-weight: bold">final</span> <span style="color: #445588;font-weight: bold">String</span> <span style="color: #008080">POD_NAME</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">System</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">getenv</span><span style="color: #000000;font-weight: bold">().</span><span style="color: #008080">getOrDefault</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"POD_NAME"</span><span style="color: #000000;font-weight: bold">,</span> <span style="color: #d14">"unknown"</span><span style="color: #000000;font-weight: bold">);</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>When the verticle starts, it registers an <em>event bus</em> consumer, sets up a Vert.x Web <code>Router</code> and binds an HTTP server:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #3c5d5d;font-weight: bold">@Override</span>
+  <span style="color: #000000;font-weight: bold">public</span> <span style="color: #445588;font-weight: bold">void</span> <span style="color: #990000;font-weight: bold">start</span><span style="color: #000000;font-weight: bold">()</span> <span style="color: #000000;font-weight: bold">{</span>
+    <span style="background-color: #f8f8f8">registerConsumer</span><span style="color: #000000;font-weight: bold">();</span>
+
+    <span style="color: #445588;font-weight: bold">Router</span> <span style="background-color: #f8f8f8">router</span> <span style="color: #000000;font-weight: bold">=</span> <span style="background-color: #f8f8f8">setupRouter</span><span style="color: #000000;font-weight: bold">();</span>
+
+    <span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">createHttpServer</span><span style="color: #000000;font-weight: bold">()</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">requestHandler</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">)</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">listen</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #008080">HTTP_PORT</span><span style="color: #000000;font-weight: bold">)</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">onSuccess</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">server</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">log</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">info</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"Server started and listening on port {}"</span><span style="color: #000000;font-weight: bold">,</span> <span style="background-color: #f8f8f8">server</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">actualPort</span><span style="color: #000000;font-weight: bold">()));</span>
+  <span style="color: #000000;font-weight: bold">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <em>event bus</em> consumer takes messages sent to the <code>greetings</code> address and formats a reply:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #000000;font-weight: bold">private</span> <span style="color: #445588;font-weight: bold">void</span> <span style="color: #990000;font-weight: bold">registerConsumer</span><span style="color: #000000;font-weight: bold">()</span> <span style="color: #000000;font-weight: bold">{</span>
+    <span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">eventBus</span><span style="color: #000000;font-weight: bold">().&lt;</span><span style="color: #445588;font-weight: bold">String</span><span style="color: #000000;font-weight: bold">&gt;</span><span style="background-color: #f8f8f8">consumer</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"greetings"</span><span style="color: #000000;font-weight: bold">,</span> <span style="background-color: #f8f8f8">msg</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="color: #000000;font-weight: bold">{</span>
+      <span style="background-color: #f8f8f8">msg</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">reply</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">String</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">format</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"Hello %s from %s"</span><span style="color: #000000;font-weight: bold">,</span> <span style="background-color: #f8f8f8">msg</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">body</span><span style="color: #000000;font-weight: bold">(),</span> <span style="color: #008080">POD_NAME</span><span style="color: #000000;font-weight: bold">));</span>
+    <span style="color: #000000;font-weight: bold">});</span>
+  <span style="color: #000000;font-weight: bold">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <code>Router</code> exposes health and readiness checks over HTTP:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #000000;font-weight: bold">private</span> <span style="color: #445588;font-weight: bold">Router</span> <span style="color: #990000;font-weight: bold">setupRouter</span><span style="color: #000000;font-weight: bold">()</span> <span style="color: #000000;font-weight: bold">{</span>
+    <span style="color: #445588;font-weight: bold">Router</span> <span style="background-color: #f8f8f8">router</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">Router</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">router</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">);</span>
+
+    <span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">get</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"/health"</span><span style="color: #000000;font-weight: bold">).</span><span style="color: #008080">handler</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">rc</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">rc</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">response</span><span style="color: #000000;font-weight: bold">().</span><span style="color: #008080">end</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"OK"</span><span style="color: #000000;font-weight: bold">));</span>
+
+    <span style="color: #445588;font-weight: bold">Handler</span><span style="color: #000000;font-weight: bold">&lt;</span><span style="color: #445588;font-weight: bold">Promise</span><span style="color: #000000;font-weight: bold">&lt;</span><span style="color: #445588;font-weight: bold">Status</span><span style="color: #000000;font-weight: bold">&gt;&gt;</span> <span style="background-color: #f8f8f8">procedure</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">ClusterHealthCheck</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">createProcedure</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">,</span> <span style="color: #000000;font-weight: bold">false</span><span style="color: #000000;font-weight: bold">);</span>
+    <span style="color: #445588;font-weight: bold">HealthChecks</span> <span style="background-color: #f8f8f8">checks</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">HealthChecks</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">create</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">).</span><span style="color: #008080">register</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"cluster-health"</span><span style="color: #000000;font-weight: bold">,</span> <span style="background-color: #f8f8f8">procedure</span><span style="color: #000000;font-weight: bold">);</span>
+    <span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">get</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"/readiness"</span><span style="color: #000000;font-weight: bold">).</span><span style="color: #008080">handler</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">HealthCheckHandler</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">createWithHealthChecks</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">checks</span><span style="color: #000000;font-weight: bold">));</span>
+    <span style="color: #000000;font-weight: bold">return</span> <span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">;</span>
+  <span style="color: #000000;font-weight: bold">}</span></code></pre>
+</div>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Tip</div>
+</td>
+<td class="content">
+Vert.x Infinispan provides a cluster health check out of the box.
+<code>io.vertx.ext.cluster.infinispan.ClusterHealthCheck</code> verifies the underlying Infinispan cluster status.
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>For local testing, a <code>main</code> method is an easy way to start the verticle from the IDE:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #000000;font-weight: bold">public</span> <span style="color: #000000;font-weight: bold">static</span> <span style="color: #445588;font-weight: bold">void</span> <span style="color: #990000;font-weight: bold">main</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">String</span><span style="color: #000000;font-weight: bold">[]</span> <span style="background-color: #f8f8f8">args</span><span style="color: #000000;font-weight: bold">)</span> <span style="color: #000000;font-weight: bold">{</span>
+    <span style="color: #445588;font-weight: bold">Vertx</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">clusteredVertx</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #000000;font-weight: bold">new</span> <span style="color: #445588;font-weight: bold">VertxOptions</span><span style="color: #000000;font-weight: bold">())</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">compose</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">vertx</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">deployVerticle</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #000000;font-weight: bold">new</span> <span style="color: #445588;font-weight: bold">BackendVerticle</span><span style="color: #000000;font-weight: bold">()))</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">onFailure</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #990000;font-weight: bold">Throwable:</span><span style="color: #000000;font-weight: bold">:</span><span style="background-color: #f8f8f8">printStackTrace</span><span style="color: #000000;font-weight: bold">);</span>
+  <span style="color: #000000;font-weight: bold">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>On startup, Vert.x Infinispan searches for an <code>infinispan.xml</code> file in the classpath or in the current working directory.</p>
+</div>
+<div class="paragraph">
+<p>In this project, the configuration file sets the Infinispan transport stack to <code>tcp</code>.
+This network stack combines IP multicast for discovery and TCP connections for group messaging:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">XML <code>backend/src/main/resources/infinispan.xml</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java"><span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">infinispan</span> <span style="color: #990000;font-weight: bold">xmlns:</span><span style="background-color: #f8f8f8">xsi</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"http://www.w3.org/2001/XMLSchema-instance"</span>
+            <span style="color: #990000;font-weight: bold">xsi:</span><span style="background-color: #f8f8f8">schemaLocation</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"urn:infinispan:config:10.1 http://www.infinispan.org/schemas/infinispan-config-10.1.xsd"</span>
+            <span style="background-color: #f8f8f8">xmlns</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"urn:infinispan:config:10.1"</span><span style="color: #000000;font-weight: bold">&gt;</span>
+
+  <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">container</span> <span style="color: #000000;font-weight: bold">default</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"distributed-cache"</span><span style="color: #000000;font-weight: bold">&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">transport</span> <span style="background-color: #f8f8f8">stack</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"tcp"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">distributed</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"distributed-cache"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.subs"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.haInfo"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.nodeInfo"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">distributed</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">configuration</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.distributed.cache.configuration"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+  <span style="color: #000000;font-weight: bold">&lt;/</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">container</span><span style="color: #000000;font-weight: bold">&gt;</span>
+
+<span style="color: #000000;font-weight: bold">&lt;/</span><span style="background-color: #f8f8f8">infinispan</span><span style="color: #000000;font-weight: bold">&gt;</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <code>tcp</code> stack is fine for testing on our development machine.
+We will see later on how to switch to a stack that is suitable when deploying to Kubernetes.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="frontend-service"><em>Frontend</em> service</h3>
+<div class="paragraph">
+<p>The <em>frontend</em> service is encapsulated in a <code>FrontendVerticle</code> class.</p>
+</div>
+<div class="paragraph">
+<p>It is configured with an environment variable:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #000000;font-weight: bold">private</span> <span style="color: #000000;font-weight: bold">static</span> <span style="color: #000000;font-weight: bold">final</span> <span style="color: #445588;font-weight: bold">int</span> <span style="color: #008080">HTTP_PORT</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">Integer</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">parseInt</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">System</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">getenv</span><span style="color: #000000;font-weight: bold">().</span><span style="color: #008080">getOrDefault</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"HTTP_PORT"</span><span style="color: #000000;font-weight: bold">,</span> <span style="color: #d14">"8080"</span><span style="color: #000000;font-weight: bold">));</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>When the verticle starts, it sets up a Vert.x Web <code>Router</code> and binds an HTTP server:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #3c5d5d;font-weight: bold">@Override</span>
+  <span style="color: #000000;font-weight: bold">public</span> <span style="color: #445588;font-weight: bold">void</span> <span style="color: #990000;font-weight: bold">start</span><span style="color: #000000;font-weight: bold">()</span> <span style="color: #000000;font-weight: bold">{</span>
+    <span style="color: #445588;font-weight: bold">Router</span> <span style="background-color: #f8f8f8">router</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">Router</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">router</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">);</span>
+
+    <span style="background-color: #f8f8f8">setupRouter</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">);</span>
+
+    <span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">createHttpServer</span><span style="color: #000000;font-weight: bold">()</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">requestHandler</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">)</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">listen</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #008080">HTTP_PORT</span><span style="color: #000000;font-weight: bold">)</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">onSuccess</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">server</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">log</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">info</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"Server started and listening on port {}"</span><span style="color: #000000;font-weight: bold">,</span> <span style="background-color: #f8f8f8">server</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">actualPort</span><span style="color: #000000;font-weight: bold">()));</span>
+  <span style="color: #000000;font-weight: bold">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <code>Router</code> defines a <em>GET</em> handler for the <code>/hello</code> URI, besides it exposes health and readiness checks over HTTP:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #000000;font-weight: bold">private</span> <span style="color: #445588;font-weight: bold">void</span> <span style="color: #990000;font-weight: bold">setupRouter</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">Router</span> <span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">)</span> <span style="color: #000000;font-weight: bold">{</span>
+    <span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">get</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"/hello"</span><span style="color: #000000;font-weight: bold">).</span><span style="color: #008080">handler</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #000000;font-weight: bold">this</span><span style="color: #000000;font-weight: bold">::</span><span style="background-color: #f8f8f8">handleHelloRequest</span><span style="color: #000000;font-weight: bold">);</span>
+
+    <span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">get</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"/health"</span><span style="color: #000000;font-weight: bold">).</span><span style="color: #008080">handler</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">rc</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">rc</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">response</span><span style="color: #000000;font-weight: bold">().</span><span style="color: #008080">end</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"OK"</span><span style="color: #000000;font-weight: bold">));</span>
+
+    <span style="color: #445588;font-weight: bold">Handler</span><span style="color: #000000;font-weight: bold">&lt;</span><span style="color: #445588;font-weight: bold">Promise</span><span style="color: #000000;font-weight: bold">&lt;</span><span style="color: #445588;font-weight: bold">Status</span><span style="color: #000000;font-weight: bold">&gt;&gt;</span> <span style="background-color: #f8f8f8">procedure</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">ClusterHealthCheck</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">createProcedure</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">,</span> <span style="color: #000000;font-weight: bold">false</span><span style="color: #000000;font-weight: bold">);</span>
+    <span style="color: #445588;font-weight: bold">HealthChecks</span> <span style="background-color: #f8f8f8">checks</span> <span style="color: #000000;font-weight: bold">=</span> <span style="color: #445588;font-weight: bold">HealthChecks</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">create</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">).</span><span style="color: #008080">register</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"cluster-health"</span><span style="color: #000000;font-weight: bold">,</span> <span style="background-color: #f8f8f8">procedure</span><span style="color: #000000;font-weight: bold">);</span>
+    <span style="background-color: #f8f8f8">router</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">get</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"/readiness"</span><span style="color: #000000;font-weight: bold">).</span><span style="color: #008080">handler</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">HealthCheckHandler</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">createWithHealthChecks</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">checks</span><span style="color: #000000;font-weight: bold">));</span>
+  <span style="color: #000000;font-weight: bold">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The HTTP request handler for <code>/hello</code> URI extracts the <code>name</code> parameter, sends a request over the <em>event bus</em> and forwards the reply to the client:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #000000;font-weight: bold">private</span> <span style="color: #445588;font-weight: bold">void</span> <span style="color: #990000;font-weight: bold">handleHelloRequest</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">RoutingContext</span> <span style="background-color: #f8f8f8">rc</span><span style="color: #000000;font-weight: bold">)</span> <span style="color: #000000;font-weight: bold">{</span>
+    <span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">eventBus</span><span style="color: #000000;font-weight: bold">().&lt;</span><span style="color: #445588;font-weight: bold">String</span><span style="color: #000000;font-weight: bold">&gt;</span><span style="background-color: #f8f8f8">request</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"greetings"</span><span style="color: #000000;font-weight: bold">,</span> <span style="background-color: #f8f8f8">rc</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">queryParams</span><span style="color: #000000;font-weight: bold">().</span><span style="color: #008080">get</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #d14">"name"</span><span style="color: #000000;font-weight: bold">))</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">map</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #990000;font-weight: bold">Message:</span><span style="color: #000000;font-weight: bold">:</span><span style="background-color: #f8f8f8">body</span><span style="color: #000000;font-weight: bold">)</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">onSuccess</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">reply</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">rc</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">response</span><span style="color: #000000;font-weight: bold">().</span><span style="color: #008080">end</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">reply</span><span style="color: #000000;font-weight: bold">))</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">onFailure</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #990000;font-weight: bold">rc:</span><span style="color: #000000;font-weight: bold">:</span><span style="background-color: #f8f8f8">fail</span><span style="color: #000000;font-weight: bold">);</span>
+  <span style="color: #000000;font-weight: bold">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>For local testing, a <code>main</code> method is an easy way to start the verticle from the IDE:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">Java <code>frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java">  <span style="color: #000000;font-weight: bold">public</span> <span style="color: #000000;font-weight: bold">static</span> <span style="color: #445588;font-weight: bold">void</span> <span style="color: #990000;font-weight: bold">main</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #445588;font-weight: bold">String</span><span style="color: #000000;font-weight: bold">[]</span> <span style="background-color: #f8f8f8">args</span><span style="color: #000000;font-weight: bold">)</span> <span style="color: #000000;font-weight: bold">{</span>
+    <span style="color: #445588;font-weight: bold">Vertx</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">clusteredVertx</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #000000;font-weight: bold">new</span> <span style="color: #445588;font-weight: bold">VertxOptions</span><span style="color: #000000;font-weight: bold">())</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">compose</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">vertx</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">vertx</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">deployVerticle</span><span style="color: #000000;font-weight: bold">(</span><span style="color: #000000;font-weight: bold">new</span> <span style="color: #445588;font-weight: bold">FrontendVerticle</span><span style="color: #000000;font-weight: bold">()))</span>
+      <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">onFailure</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">t</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">t</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">printStackTrace</span><span style="color: #000000;font-weight: bold">());</span>
+  <span style="color: #000000;font-weight: bold">}</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <em>frontend</em> project, like the <em>backend</em> project, contains an <code>infinispan.xml</code> in the <code>src/main/resources</code> directory that is suitable for testing on the development machine.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="test-locally">Test locally</h3>
+<div class="paragraph">
+<p>You can start each service:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>straight from your IDE or,</p>
+</li>
+<li>
+<p>with Maven: <code>mvn compile exec:java</code>, or</p>
+</li>
+<li>
+<p>with Gradle: <code>./gradlew run</code> (Linux, macOS) or <code>gradlew run</code> (Windows).</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The <em>frontend</em> service output should print a message similar to the following:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>2020-07-16 16:29:39,478 [vert.x-eventloop-thread-2] INFO  i.v.howtos.cluster.FrontendVerticle - Server started and listening on port 8080</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The <em>backend</em>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>2020-07-16 16:29:40,770 [vert.x-eventloop-thread-2] INFO  i.v.howtos.cluster.BackendVerticle - Server started and listening on port 38621</pre>
+</div>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Tip</div>
+</td>
+<td class="content">
+Take note of the <code>backend</code> HTTP server port.
+By default it uses a random port to avoid conflict with the <code>frontend</code> HTTP server.
+</td>
+</tr>
+</table>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+The following examples use the <a href="https://httpie.org/">HTTPie</a> command line HTTP client.
+Please refer to the <a href="https://httpie.org/doc#installation">installation</a> documentation if you don&#8217;t have it installed on your system yet.
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>First let&#8217;s send a request to the <em>frontend</em> for the <code>/hello</code> URI with the <code>name</code> query param set to <code>Vert.x Clustering</code></p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>http :8080/hello name=="Vert.x Clustering"</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You should see something like:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>HTTP/1.1 200 OK
+content-length: 36
+
+Hello Vert.x Clustering from unknown</pre>
+</div>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+<code>unknown</code> is the default pod name used by the <em>backend</em> when the <code>POD_NAME</code> environment variable is not defined.
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>We can also verify the readiness of the <em>frontend</em>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>http :8080/readiness
+HTTP/1.1 200 OK
+content-length: 65
+content-type: application/json;charset=UTF-8
+
+{
+    "checks": [
+        {
+            "id": "cluster-health",
+            "status": "UP"
+        }
+    ],
+    "outcome": "UP"
+}</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And the <em>backend</em>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>http :38621/readiness
+HTTP/1.1 200 OK
+content-length: 65
+content-type: application/json;charset=UTF-8
+
+{
+    "checks": [
+        {
+            "id": "cluster-health",
+            "status": "UP"
+        }
+    ],
+    "outcome": "UP"</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="deploy-to-kubernetes">Deploy to Kubernetes</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>First, make sure Minikube has started with <code>minikube status</code>.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+If you don&#8217;t use Minikube, verify that <code>kubectl</code> is connected to your cluster.
+</td>
+</tr>
+</table>
+</div>
+<div class="sect2">
+<h3 id="push-container-images">Push container images</h3>
+<div class="paragraph">
+<p>There are <a href="https://minikube.sigs.k8s.io/docs/handbook/pushing/">different ways</a> to push container images to Minikube.</p>
+</div>
+<div class="paragraph">
+<p>In this document, we will push directly to the in-cluster Docker daemon.
+To do so, we must point our shell to Minikube&#8217;s docker-daemon:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>eval $(minikube -p minikube docker-env)</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Then, within the same shell, we can build the images with Jib:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>with Maven: <code>mvn compile jib:dockerBuild</code>, or</p>
+</li>
+<li>
+<p>with Gradle: <code>./gradlew jibDockerBuild</code> (Linux, macOS) or <code>gradlew jibDockerBuild</code> (Windows).</p>
+</li>
+</ul>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+Jib will not use the Docker daemon to build the image but only to push it.
+</td>
+</tr>
+</table>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+If you don&#8217;t use Minikube, please refer to the <a href="https://github.com/GoogleContainerTools/jib/tree/master/jib-maven-plugin#configuration">Jib Maven</a> or <a href="https://github.com/GoogleContainerTools/jib/tree/master/jib-gradle-plugin#configuration">Jib Gradle</a> plugin documentation for details about how to configure them when pushing to a registry.
+</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="sect2">
+<h3 id="clustered-app-headless-service">Clustered app headless service</h3>
+<div class="paragraph">
+<p>On Kubernetes, Infinispan shouldn&#8217;t use the <code>tcp</code> transport stack because most often IP multicast is not available.</p>
+</div>
+<div class="paragraph">
+<p>Instead, it provides a <code>kubernetes</code> stack that relies on <a href="https://kubernetes.io/docs/concepts/services-networking/service/#headless-services">headless service</a> lookup for discovery and TCP connections for group messaging:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">XML <code>backend/src/main/resources/infinispan-kubernetes.xml</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java"><span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">infinispan</span> <span style="color: #990000;font-weight: bold">xmlns:</span><span style="background-color: #f8f8f8">xsi</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"http://www.w3.org/2001/XMLSchema-instance"</span>
+            <span style="color: #990000;font-weight: bold">xsi:</span><span style="background-color: #f8f8f8">schemaLocation</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"urn:infinispan:config:10.1 http://www.infinispan.org/schemas/infinispan-config-10.1.xsd"</span>
+            <span style="background-color: #f8f8f8">xmlns</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"urn:infinispan:config:10.1"</span><span style="color: #000000;font-weight: bold">&gt;</span>
+
+  <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">container</span> <span style="color: #000000;font-weight: bold">default</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"distributed-cache"</span><span style="color: #000000;font-weight: bold">&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">transport</span> <span style="background-color: #f8f8f8">stack</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"kubernetes"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">distributed</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"distributed-cache"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.subs"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.haInfo"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.nodeInfo"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">distributed</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">configuration</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.distributed.cache.configuration"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
+  <span style="color: #000000;font-weight: bold">&lt;/</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">container</span><span style="color: #000000;font-weight: bold">&gt;</span>
+
+<span style="color: #000000;font-weight: bold">&lt;/</span><span style="background-color: #f8f8f8">infinispan</span><span style="color: #000000;font-weight: bold">&gt;</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Let&#8217;s create a <code>clustered-app</code> headless service which selects member pods having the label <code>cluster:clustered-app</code>:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">YML <code>headless-service.yml</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java"><span style="color: #990000;font-weight: bold">apiVersion:</span> <span style="background-color: #f8f8f8">v1</span>
+<span style="color: #990000;font-weight: bold">kind:</span> <span style="color: #445588;font-weight: bold">Service</span>
+<span style="color: #990000;font-weight: bold">metadata:</span>
+  <span style="color: #990000;font-weight: bold">name:</span> <span style="background-color: #f8f8f8">clustered</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">app</span>
+<span style="color: #990000;font-weight: bold">spec:</span>
+  <span style="color: #990000;font-weight: bold">selector:</span>
+    <span style="color: #990000;font-weight: bold">cluster:</span> <span style="background-color: #f8f8f8">clustered</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">app</span>
+  <span style="color: #990000;font-weight: bold">ports:</span>
+    <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="background-color: #f8f8f8">jgroups</span>
+      <span style="color: #990000;font-weight: bold">port:</span> <span style="color: #009999">7800</span>
+      <span style="color: #990000;font-weight: bold">protocol:</span> <span style="color: #008080">TCP</span>
+  <span style="color: #990000;font-weight: bold">publishNotReadyAddresses:</span> <span style="color: #000000;font-weight: bold">true</span>
+  <span style="color: #990000;font-weight: bold">clusterIP:</span> <span style="color: #445588;font-weight: bold">None</span></code></pre>
+</div>
+</div>
+<div class="admonitionblock important">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Important</div>
+</td>
+<td class="content">
+The headless service must account for pods even when not ready (<code>publishNotReadyAddresses</code> set to <code>true</code>).
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Apply this configuration:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>kubectl apply -f headless-service.yml</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Then verify it was succesful:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>kubectl get services clustered-app</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You should see something like:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>NAME            TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
+clustered-app   ClusterIP   None         &lt;none&gt;        7800/TCP   63m</pre>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="frontend-deployment-and-service"><em>Frontend</em> deployment and service</h3>
+<div class="paragraph">
+<p>Let&#8217;s deploy the <em>frontend</em> service now.</p>
+</div>
+<div class="paragraph">
+<p>We want at least two replicas for high availability.</p>
+</div>
+<div class="paragraph">
+<p>To configure Vert.x Infinispan, we need to start the JVM with a few system properties:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>java.net.preferIPv4Stack</code></p>
+</li>
+<li>
+<p><code>vertx.infinispan.config</code>: alternative Infinispan configuration file with <code>kubernetes</code> transport stack</p>
+</li>
+<li>
+<p><code>jgroups.dns.query</code>: the DNS name of the headless service we just created</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>And then Kubernetes needs to know the URI for liveness, readiness and startup probes.</p>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Tip</div>
+</td>
+<td class="content">
+The startup probe can point to the readiness URI with different timeout settings.
+</td>
+</tr>
+</table>
+</div>
+<div class="listingblock collapsed">
+<div class="title">YML <code>frontend/deployment.yml</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java"><span style="color: #990000;font-weight: bold">apiVersion:</span> <span style="background-color: #f8f8f8">apps</span><span style="color: #000000;font-weight: bold">/</span><span style="background-color: #f8f8f8">v1</span>
+<span style="color: #990000;font-weight: bold">kind:</span> <span style="color: #445588;font-weight: bold">Deployment</span>
+<span style="color: #990000;font-weight: bold">metadata:</span>
+  <span style="color: #990000;font-weight: bold">name:</span> <span style="background-color: #f8f8f8">frontend</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">deployment</span>
+  <span style="color: #990000;font-weight: bold">labels:</span>
+    <span style="color: #990000;font-weight: bold">app:</span> <span style="background-color: #f8f8f8">frontend</span>
+<span style="color: #990000;font-weight: bold">spec:</span>
+  <span style="color: #990000;font-weight: bold">replicas:</span> <span style="color: #009999">2</span>
+  <span style="color: #990000;font-weight: bold">selector:</span>
+    <span style="color: #990000;font-weight: bold">matchLabels:</span>
+      <span style="color: #990000;font-weight: bold">app:</span> <span style="background-color: #f8f8f8">frontend</span>
+  <span style="color: #990000;font-weight: bold">template:</span>
+    <span style="color: #990000;font-weight: bold">metadata:</span>
+      <span style="color: #990000;font-weight: bold">labels:</span>
+        <span style="color: #990000;font-weight: bold">app:</span> <span style="background-color: #f8f8f8">frontend</span>
+        <span style="color: #990000;font-weight: bold">cluster:</span> <span style="background-color: #f8f8f8">clustered</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">app</span>
+    <span style="color: #990000;font-weight: bold">spec:</span>
+      <span style="color: #990000;font-weight: bold">containers:</span>
+        <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="background-color: #f8f8f8">frontend</span>
+          <span style="color: #990000;font-weight: bold">image:</span> <span style="background-color: #f8f8f8">clustering</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">kubernetes</span><span style="color: #000000;font-weight: bold">/</span><span style="color: #990000;font-weight: bold">frontend:</span><span style="background-color: #f8f8f8">latest</span>
+          <span style="color: #990000;font-weight: bold">imagePullPolicy:</span> <span style="color: #445588;font-weight: bold">IfNotPresent</span>
+          <span style="color: #990000;font-weight: bold">env:</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">JAVA_TOOL_OPTIONS</span>
+              <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"-Djava.net.preferIPv4Stack=true -Dvertx.infinispan.config=infinispan-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">HTTP_PORT</span>
+              <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"8080"</span>
+          <span style="color: #990000;font-weight: bold">ports:</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">containerPort:</span> <span style="color: #009999">8080</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">containerPort:</span> <span style="color: #009999">7800</span>
+          <span style="color: #990000;font-weight: bold">livenessProbe:</span>
+            <span style="color: #990000;font-weight: bold">httpGet:</span>
+              <span style="color: #990000;font-weight: bold">path:</span> <span style="color: #000000;font-weight: bold">/</span><span style="background-color: #f8f8f8">health</span>
+              <span style="color: #990000;font-weight: bold">port:</span> <span style="color: #009999">8080</span>
+            <span style="color: #990000;font-weight: bold">failureThreshold:</span> <span style="color: #009999">1</span>
+            <span style="color: #990000;font-weight: bold">periodSeconds:</span> <span style="color: #009999">10</span>
+          <span style="color: #990000;font-weight: bold">readinessProbe:</span>
+            <span style="color: #990000;font-weight: bold">httpGet:</span>
+              <span style="color: #990000;font-weight: bold">path:</span> <span style="color: #000000;font-weight: bold">/</span><span style="background-color: #f8f8f8">readiness</span>
+              <span style="color: #990000;font-weight: bold">port:</span> <span style="color: #009999">8080</span>
+            <span style="color: #990000;font-weight: bold">initialDelaySeconds:</span> <span style="color: #009999">5</span>
+            <span style="color: #990000;font-weight: bold">periodSeconds:</span> <span style="color: #009999">5</span>
+          <span style="color: #990000;font-weight: bold">startupProbe:</span>
+            <span style="color: #990000;font-weight: bold">httpGet:</span>
+              <span style="color: #990000;font-weight: bold">path:</span> <span style="color: #000000;font-weight: bold">/</span><span style="background-color: #f8f8f8">readiness</span>
+              <span style="color: #990000;font-weight: bold">port:</span> <span style="color: #009999">8080</span>
+            <span style="color: #990000;font-weight: bold">failureThreshold:</span> <span style="color: #009999">30</span>
+            <span style="color: #990000;font-weight: bold">periodSeconds:</span> <span style="color: #009999">10</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Apply this configuration:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>kubectl apply -f frontend/deployment.yml</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Verify the pods have started successfully:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>kubectl get pods</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You should see something like:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>NAME                                  READY   STATUS    RESTARTS   AGE
+frontend-deployment-8cfd4d966-lpvsb   1/1     Running   0          4m58s
+frontend-deployment-8cfd4d966-tctgv   1/1     Running   0          4m58s</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We also need a service to load-balance the HTTP traffic.
+Pods will be selected by the label <code>app:frontend</code> that was defined in the deployment:</p>
+</div>
+<div class="listingblock collapsed">
+<div class="title">YML <code>frontend/service.yml</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java"><span style="color: #990000;font-weight: bold">apiVersion:</span> <span style="background-color: #f8f8f8">v1</span>
+<span style="color: #990000;font-weight: bold">kind:</span> <span style="color: #445588;font-weight: bold">Service</span>
+<span style="color: #990000;font-weight: bold">metadata:</span>
+  <span style="color: #990000;font-weight: bold">name:</span> <span style="background-color: #f8f8f8">frontend</span>
+<span style="color: #990000;font-weight: bold">spec:</span>
+  <span style="color: #990000;font-weight: bold">selector:</span>
+    <span style="color: #990000;font-weight: bold">app:</span> <span style="background-color: #f8f8f8">frontend</span>
+  <span style="color: #990000;font-weight: bold">ports:</span>
+    <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">protocol:</span> <span style="color: #008080">TCP</span>
+      <span style="color: #990000;font-weight: bold">port:</span> <span style="color: #009999">80</span>
+      <span style="color: #990000;font-weight: bold">targetPort:</span> <span style="color: #009999">8080</span>
+  <span style="color: #990000;font-weight: bold">type:</span> <span style="color: #445588;font-weight: bold">LoadBalancer</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Apply this configuration:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>kubectl apply -f frontend/service.yml</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Verify the service has been created successfully:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>kubectl get services frontend</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You should see something like:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>NAME       TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+frontend   LoadBalancer   10.106.16.88   &lt;pending&gt;     80:30729/TCP   62s</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If you use Minikube, open another terminal window and run:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>minikube tunnel</pre>
+</div>
+</div>
+<div class="paragraph">
+<p><a href="https://minikube.sigs.k8s.io/docs/handbook/accessing/#using-minikube-tunnel">Minikube tunnel</a> runs as a separate process and exposes the service to the host operating system.</p>
+</div>
+<div class="paragraph">
+<p>If you run <code>kubectl get services frontend</code> again, then the external IP should be set:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>NAME       TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)        AGE
+frontend   LoadBalancer   10.100.254.64   10.100.254.64   80:30660/TCP   30m</pre>
+</div>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Tip</div>
+</td>
+<td class="content">
+Take note of the external IP.
+</td>
+</tr>
+</table>
+</div>
+<div class="admonitionblock important">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Important</div>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>Minikube tunnel requires privilege escalation.
+If you are not granted to do this, you can still access the service via the <em>NodePort</em> with <code>minikube service --url frontend</code>.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+If you don&#8217;t use Minikube and no external IP has been assigned to your service, please refer to your cluster documentation.
+</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="sect2">
+<h3 id="backend-deployment"><em>Backend</em> deployment</h3>
+<div class="paragraph">
+<p>The <em>backend</em> service deployment is similar to the <em>frontend</em> one.</p>
+</div>
+<div class="paragraph">
+<p>Notice that in this case:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>3 replicas should be created</p>
+</li>
+<li>
+<p>the <code>POD_NAME</code> environment variable will be set in the container</p>
+</li>
+</ul>
+</div>
+<div class="listingblock collapsed">
+<div class="title">YML <code>backend/deployment.yml</code></div>
+<div class="content">
+<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java"><span style="color: #990000;font-weight: bold">apiVersion:</span> <span style="background-color: #f8f8f8">apps</span><span style="color: #000000;font-weight: bold">/</span><span style="background-color: #f8f8f8">v1</span>
+<span style="color: #990000;font-weight: bold">kind:</span> <span style="color: #445588;font-weight: bold">Deployment</span>
+<span style="color: #990000;font-weight: bold">metadata:</span>
+  <span style="color: #990000;font-weight: bold">name:</span> <span style="background-color: #f8f8f8">backend</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">deployment</span>
+  <span style="color: #990000;font-weight: bold">labels:</span>
+    <span style="color: #990000;font-weight: bold">app:</span> <span style="background-color: #f8f8f8">backend</span>
+<span style="color: #990000;font-weight: bold">spec:</span>
+  <span style="color: #990000;font-weight: bold">replicas:</span> <span style="color: #009999">3</span>
+  <span style="color: #990000;font-weight: bold">selector:</span>
+    <span style="color: #990000;font-weight: bold">matchLabels:</span>
+      <span style="color: #990000;font-weight: bold">app:</span> <span style="background-color: #f8f8f8">backend</span>
+  <span style="color: #990000;font-weight: bold">template:</span>
+    <span style="color: #990000;font-weight: bold">metadata:</span>
+      <span style="color: #990000;font-weight: bold">labels:</span>
+        <span style="color: #990000;font-weight: bold">app:</span> <span style="background-color: #f8f8f8">backend</span>
+        <span style="color: #990000;font-weight: bold">cluster:</span> <span style="background-color: #f8f8f8">clustered</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">app</span>
+    <span style="color: #990000;font-weight: bold">spec:</span>
+      <span style="color: #990000;font-weight: bold">containers:</span>
+        <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="background-color: #f8f8f8">backend</span>
+          <span style="color: #990000;font-weight: bold">image:</span> <span style="background-color: #f8f8f8">clustering</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">kubernetes</span><span style="color: #000000;font-weight: bold">/</span><span style="color: #990000;font-weight: bold">backend:</span><span style="background-color: #f8f8f8">latest</span>
+          <span style="color: #990000;font-weight: bold">imagePullPolicy:</span> <span style="color: #445588;font-weight: bold">IfNotPresent</span>
+          <span style="color: #990000;font-weight: bold">env:</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">JAVA_TOOL_OPTIONS</span>
+              <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"-Djava.net.preferIPv4Stack=true -Dvertx.infinispan.config=infinispan-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">HTTP_PORT</span>
+              <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"8080"</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">POD_NAME</span>
+              <span style="color: #990000;font-weight: bold">valueFrom:</span>
+                <span style="color: #990000;font-weight: bold">fieldRef:</span>
+                  <span style="color: #990000;font-weight: bold">fieldPath:</span> <span style="background-color: #f8f8f8">metadata</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">name</span>
+          <span style="color: #990000;font-weight: bold">ports:</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">containerPort:</span> <span style="color: #009999">8080</span>
+            <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">containerPort:</span> <span style="color: #009999">7800</span>
+          <span style="color: #990000;font-weight: bold">livenessProbe:</span>
+            <span style="color: #990000;font-weight: bold">httpGet:</span>
+              <span style="color: #990000;font-weight: bold">path:</span> <span style="color: #000000;font-weight: bold">/</span><span style="background-color: #f8f8f8">health</span>
+              <span style="color: #990000;font-weight: bold">port:</span> <span style="color: #009999">8080</span>
+            <span style="color: #990000;font-weight: bold">failureThreshold:</span> <span style="color: #009999">1</span>
+            <span style="color: #990000;font-weight: bold">periodSeconds:</span> <span style="color: #009999">10</span>
+          <span style="color: #990000;font-weight: bold">readinessProbe:</span>
+            <span style="color: #990000;font-weight: bold">httpGet:</span>
+              <span style="color: #990000;font-weight: bold">path:</span> <span style="color: #000000;font-weight: bold">/</span><span style="background-color: #f8f8f8">readiness</span>
+              <span style="color: #990000;font-weight: bold">port:</span> <span style="color: #009999">8080</span>
+            <span style="color: #990000;font-weight: bold">initialDelaySeconds:</span> <span style="color: #009999">5</span>
+            <span style="color: #990000;font-weight: bold">periodSeconds:</span> <span style="color: #009999">5</span>
+          <span style="color: #990000;font-weight: bold">startupProbe:</span>
+            <span style="color: #990000;font-weight: bold">httpGet:</span>
+              <span style="color: #990000;font-weight: bold">path:</span> <span style="color: #000000;font-weight: bold">/</span><span style="background-color: #f8f8f8">readiness</span>
+              <span style="color: #990000;font-weight: bold">port:</span> <span style="color: #009999">8080</span>
+            <span style="color: #990000;font-weight: bold">failureThreshold:</span> <span style="color: #009999">30</span>
+            <span style="color: #990000;font-weight: bold">periodSeconds:</span> <span style="color: #009999">10</span></code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Apply this configuration:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>kubectl apply -f backend/deployment.yml</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Verify the pods have started successfully:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>kubectl get pods</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You should see something like:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>NAME                                  READY   STATUS    RESTARTS   AGE
+backend-deployment-74d7f45c67-h7h9c   1/1     Running   0          63s
+backend-deployment-74d7f45c67-r45bc   1/1     Running   0          63s
+backend-deployment-74d7f45c67-r75ht   1/1     Running   0          63s
+frontend-deployment-8cfd4d966-lpvsb   1/1     Running   0          15m
+frontend-deployment-8cfd4d966-tctgv   1/1     Running   0          15m</pre>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="testing-remotely">Testing remotely</h3>
+<div class="paragraph">
+<p>We can now send a request to the <em>frontend</em> for the <code>/hello</code> URI with the <code>name</code> query param set to <code>Vert.x Clustering</code></p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>http 10.100.254.64/hello name=="Vert.x Clustering"</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You should see something like:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>HTTP/1.1 200 OK
+content-length: 64
+
+Hello Vert.x Clustering from backend-deployment-74d7f45c67-6r2g2</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Notice that we can see now the name of the pod instead of the default value (<code>unknown</code>).</p>
+</div>
+<div class="paragraph">
+<p>Also, if you send requests repeatedly, you will see that the <code>backend</code> services receive <code>event bus</code> requests in a round-robin fashion.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="summary">Summary</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>This document covered:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>dependencies required to deploy clustered Vert.x apps on Kubernetes with Infinispan</p>
+</li>
+<li>
+<p>containerization of Vert.x services with Jib</p>
+</li>
+<li>
+<p>configuration of the Vert.x Infinispan cluster manager for local testing and deployment on Kubernetes</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="see-also">See also</h2>
+<div class="sectionbody">
+<div class="ulist">
+<ul>
+<li>
+<p><a href="https://github.com/GoogleContainerTools/jib/"><code>Containerization with Jib</code></a></p>
+</li>
+<li>
+<p><a href="https://vertx.io/docs/vertx-infinispan/java/#_configuring_for_kubernetes">Configuring Vert.x Infinispan for Kubernetes</a></p>
+</li>
+<li>
+<p><a href="https://kubernetes.io/docs/concepts/services-networking/service/#headless-services">Creating Kubernetes headless services</a></p>
+</li>
+<li>
+<p><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/">Configure Liveness, Readiness and Startup Probes</a></p>
+</li>
+<li>
+<p><a href="https://vertx.io/docs/vertx-health-check/java"><code>Vert.x Health Check</code></a></p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <!-- Sharingbutton Facebook -->
+<a class="resp-sharing-button__link" href="https://facebook.com/sharer/sharer.php?u=https://vertx-howtos.github.io/clustering-kubernetes-howto" target="_blank"
+    rel="noopener" aria-label="">
+    <div class="resp-sharing-button resp-sharing-button--facebook resp-sharing-button--small">
+        <div aria-hidden="true" class="resp-sharing-button__icon resp-sharing-button__icon--solid">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path
+                    d="M18.77 7.46H14.5v-1.9c0-.9.6-1.1 1-1.1h3V.5h-4.33C10.24.5 9.5 3.44 9.5 5.32v2.15h-3v4h3v12h5v-12h3.85l.42-4z" />
+                </svg>
+        </div>
+    </div>
+</a>
+
+<!-- Sharingbutton Twitter -->
+<a class="resp-sharing-button__link" href="https://twitter.com/intent/tweet/?text=Deploying%20clustered%20Vert.x%20apps%20on%20Kubernetes%20with%20Infinispan&amp;url=https://vertx-howtos.github.io/clustering-kubernetes-howto"
+    target="_blank" rel="noopener" aria-label="">
+    <div class="resp-sharing-button resp-sharing-button--twitter resp-sharing-button--small">
+        <div aria-hidden="true" class="resp-sharing-button__icon resp-sharing-button__icon--solid">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path
+                    d="M23.44 4.83c-.8.37-1.5.38-2.22.02.93-.56.98-.96 1.32-2.02-.88.52-1.86.9-2.9 1.1-.82-.88-2-1.43-3.3-1.43-2.5 0-4.55 2.04-4.55 4.54 0 .36.03.7.1 1.04-3.77-.2-7.12-2-9.36-4.75-.4.67-.6 1.45-.6 2.3 0 1.56.8 2.95 2 3.77-.74-.03-1.44-.23-2.05-.57v.06c0 2.2 1.56 4.03 3.64 4.44-.67.2-1.37.2-2.06.08.58 1.8 2.26 3.12 4.25 3.16C5.78 18.1 3.37 18.74 1 18.46c2 1.3 4.4 2.04 6.97 2.04 8.35 0 12.92-6.92 12.92-12.93 0-.2 0-.4-.02-.6.9-.63 1.96-1.22 2.56-2.14z" />
+                </svg>
+        </div>
+    </div>
+</a>
+
+<!-- Sharingbutton E-Mail -->
+<a class="resp-sharing-button__link" href="mailto:?subject=Deploying%20clustered%20Vert.x%20apps%20on%20Kubernetes%20with%20Infinispan&amp;body=https://vertx-howtos.github.io/clustering-kubernetes-howto" target="_self" rel="noopener"
+    aria-label="">
+    <div class="resp-sharing-button resp-sharing-button--email resp-sharing-button--small">
+        <div aria-hidden="true" class="resp-sharing-button__icon resp-sharing-button__icon--solid">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path
+                    d="M22 4H2C.9 4 0 4.9 0 6v12c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM7.25 14.43l-3.5 2c-.08.05-.17.07-.25.07-.17 0-.34-.1-.43-.25-.14-.24-.06-.55.18-.68l3.5-2c.24-.14.55-.06.68.18.14.24.06.55-.18.68zm4.75.07c-.1 0-.2-.03-.27-.08l-8.5-5.5c-.23-.15-.3-.46-.15-.7.15-.22.46-.3.7-.14L12 13.4l8.23-5.32c.23-.15.54-.08.7.15.14.23.07.54-.16.7l-8.5 5.5c-.08.04-.17.07-.27.07zm8.93 1.75c-.1.16-.26.25-.43.25-.08 0-.17-.02-.25-.07l-3.5-2c-.24-.13-.32-.44-.18-.68s.44-.32.68-.18l3.5 2c.24.13.32.44.18.68z" />
+                </svg>
+        </div>
+    </div>
+</a>
+
+<!-- Sharingbutton LinkedIn -->
+<a class="resp-sharing-button__link"
+    href="https://www.linkedin.com/shareArticle?mini=true&amp;url=https://vertx-howtos.github.io/clustering-kubernetes-howto&amp;title=Deploying%20clustered%20Vert.x%20apps%20on%20Kubernetes%20with%20Infinispan&amp;summary=Deploying%20clustered%20Vert.x%20apps%20on%20Kubernetes%20with%20Infinispan&amp;source=https://vertx-howtos.github.io/clustering-kubernetes-howto"
+    target="_blank" rel="noopener" aria-label="">
+    <div class="resp-sharing-button resp-sharing-button--linkedin resp-sharing-button--small">
+        <div aria-hidden="true" class="resp-sharing-button__icon resp-sharing-button__icon--solid">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path
+                    d="M6.5 21.5h-5v-13h5v13zM4 6.5C2.5 6.5 1.5 5.3 1.5 4s1-2.4 2.5-2.4c1.6 0 2.5 1 2.6 2.5 0 1.4-1 2.5-2.6 2.5zm11.5 6c-1 0-2 1-2 2v7h-5v-13h5V10s1.6-1.5 4-1.5c3 0 5 2.2 5 6.3v6.7h-5v-7c0-1-1-2-2-2z" />
+                </svg>
+        </div>
+    </div>
+</a>
+
+<!-- Sharingbutton Reddit -->
+<a class="resp-sharing-button__link"
+    href="https://reddit.com/submit/?url=https://vertx-howtos.github.io/clustering-kubernetes-howto&amp;resubmit=true&amp;title=Deploying%20clustered%20Vert.x%20apps%20on%20Kubernetes%20with%20Infinispan" target="_blank" rel="noopener"
+    aria-label="">
+    <div class="resp-sharing-button resp-sharing-button--reddit resp-sharing-button--small">
+        <div aria-hidden="true" class="resp-sharing-button__icon resp-sharing-button__icon--solid">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path
+                    d="M24 11.5c0-1.65-1.35-3-3-3-.96 0-1.86.48-2.42 1.24-1.64-1-3.75-1.64-6.07-1.72.08-1.1.4-3.05 1.52-3.7.72-.4 1.73-.24 3 .5C17.2 6.3 18.46 7.5 20 7.5c1.65 0 3-1.35 3-3s-1.35-3-3-3c-1.38 0-2.54.94-2.88 2.22-1.43-.72-2.64-.8-3.6-.25-1.64.94-1.95 3.47-2 4.55-2.33.08-4.45.7-6.1 1.72C4.86 8.98 3.96 8.5 3 8.5c-1.65 0-3 1.35-3 3 0 1.32.84 2.44 2.05 2.84-.03.22-.05.44-.05.66 0 3.86 4.5 7 10 7s10-3.14 10-7c0-.22-.02-.44-.05-.66 1.2-.4 2.05-1.54 2.05-2.84zM2.3 13.37C1.5 13.07 1 12.35 1 11.5c0-1.1.9-2 2-2 .64 0 1.22.32 1.6.82-1.1.85-1.92 1.9-2.3 3.05zm3.7.13c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9.8 4.8c-1.08.63-2.42.96-3.8.96-1.4 0-2.74-.34-3.8-.95-.24-.13-.32-.44-.2-.68.15-.24.46-.32.7-.18 1.83 1.06 4.76 1.06 6.6 0 .23-.13.53-.05.67.2.14.23.06.54-.18.67zm.2-2.8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.7-2.13c-.38-1.16-1.2-2.2-2.3-3.05.38-.5.97-.82 1.6-.82 1.1 0 2 .9 2 2 0 .84-.53 1.57-1.3 1.87z" />
+                </svg>
+        </div>
+    </div>
+</a>
+
+<!-- Sharingbutton WhatsApp -->
+<a class="resp-sharing-button__link" href="whatsapp://send?text=Deploying%20clustered%20Vert.x%20apps%20on%20Kubernetes%20with%20Infinispan%20https://vertx-howtos.github.io/clustering-kubernetes-howto" target="_blank" rel="noopener"
+    aria-label="">
+    <div class="resp-sharing-button resp-sharing-button--whatsapp resp-sharing-button--small">
+        <div aria-hidden="true" class="resp-sharing-button__icon resp-sharing-button__icon--solid">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path
+                    d="M20.1 3.9C17.9 1.7 15 .5 12 .5 5.8.5.7 5.6.7 11.9c0 2 .5 3.9 1.5 5.6L.6 23.4l6-1.6c1.6.9 3.5 1.3 5.4 1.3 6.3 0 11.4-5.1 11.4-11.4-.1-2.8-1.2-5.7-3.3-7.8zM12 21.4c-1.7 0-3.3-.5-4.8-1.3l-.4-.2-3.5 1 1-3.4L4 17c-1-1.5-1.4-3.2-1.4-5.1 0-5.2 4.2-9.4 9.4-9.4 2.5 0 4.9 1 6.7 2.8 1.8 1.8 2.8 4.2 2.8 6.7-.1 5.2-4.3 9.4-9.5 9.4zm5.1-7.1c-.3-.1-1.7-.9-1.9-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.1-.2.2-.3.2-.6.1s-1.2-.5-2.3-1.4c-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6s.3-.3.4-.5c.2-.1.3-.3.4-.5.1-.2 0-.4 0-.5C10 9 9.3 7.6 9 7c-.1-.4-.4-.3-.5-.3h-.6s-.4.1-.7.3c-.3.3-1 1-1 2.4s1 2.8 1.1 3c.1.2 2 3.1 4.9 4.3.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.6-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.3-.3-.4-.6-.5z" />
+                </svg>
+        </div>
+    </div>
+</a>
+
+<!-- Sharingbutton Telegram -->
+<a class="resp-sharing-button__link" href="https://telegram.me/share/url?text=Deploying%20clustered%20Vert.x%20apps%20on%20Kubernetes%20with%20Infinispan&amp;url=https://vertx-howtos.github.io/clustering-kubernetes-howto"
+    target="_blank" rel="noopener" aria-label="">
+    <div class="resp-sharing-button resp-sharing-button--telegram resp-sharing-button--small">
+        <div aria-hidden="true" class="resp-sharing-button__icon resp-sharing-button__icon--solid">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path
+                    d="M.707 8.475C.275 8.64 0 9.508 0 9.508s.284.867.718 1.03l5.09 1.897 1.986 6.38a1.102 1.102 0 0 0 1.75.527l2.96-2.41a.405.405 0 0 1 .494-.013l5.34 3.87a1.1 1.1 0 0 0 1.046.135 1.1 1.1 0 0 0 .682-.803l3.91-18.795A1.102 1.102 0 0 0 22.5.075L.706 8.475z" />
+                </svg>
+        </div>
+    </div>
+</a>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <hr>
+      <p><small>Last published: 2020-07-20 14:45:53 +0000.</small></p>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const blocks = document.getElementsByClassName("collapsed");
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      const blockWrapper = document.createElement("div");
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.innerHTML = "Details <em>(click to expand)</em>";
+      details.appendChild(summary);
+      details.appendChild(blockWrapper);
+      block.parentNode.insertBefore(details, block);
+      blockWrapper.appendChild(block);
+    }
+  })();
+</script>
+
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+    crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.6/umd/popper.min.js" integrity="sha384-wHAiFfRlMFy6i5SRaxvfOCifBUQy1xHdJ/yoi7FRNXMRBu5WHdZYu1hA6ZOblgut"
+    crossorigin="anonymous"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/js/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k"
+    crossorigin="anonymous"></script>
+</body>
+
+</html>

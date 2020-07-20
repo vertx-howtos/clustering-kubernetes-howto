@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clustered-app
+spec:
+  selector:
+    cluster: clustered-app
+  ports:
+    - name: jgroups
+      port: 7800
+      protocol: TCP
+  publishNotReadyAddresses: true
+  clusterIP: None
