@@ -192,23 +192,8 @@ include::backend/src/main/java/io/vertx/howtos/cluster/BackendVerticle.java[tag=
 ----
 endif::env-github[]
 
-On startup, Vert.x Infinispan searches for an `infinispan.xml` file in the classpath or in the current working directory.
-
-In this project, the configuration file sets the Infinispan transport stack to `tcp`.
-This network stack combines IP multicast for discovery and TCP connections for group messaging:
-
-ifdef::env-github[]
-link:backend/src/main/resources/infinispan.xml[Infinispan Local]
-endif::env-github[]
-ifndef::env-github[]
-[source,java,role="collapsed"]
-.XML `backend/src/main/resources/infinispan.xml`
-----
-include::backend/src/main/resources/infinispan.xml[]
-----
-endif::env-github[]
-
-The `tcp` stack is fine for testing on our development machine.
+On startup, Vert.x Infinispan uses the default networking stack which combines IP multicast for discovery and TCP connections for group messaging.
+This networking stack is fine for testing on our development machine.
 We will see later on how to switch to a stack that is suitable when deploying to Kubernetes.
 
 === _Frontend_ service
@@ -279,8 +264,6 @@ ifndef::env-github[]
 include::frontend/src/main/java/io/vertx/howtos/cluster/FrontendVerticle.java[tag=main]
 ----
 endif::env-github[]
-
-The _frontend_ project, like the _backend_ project, contains an `infinispan.xml` in the `src/main/resources` directory that is suitable for testing on the development machine.
 
 === Test locally
 
@@ -390,20 +373,9 @@ NOTE: If you don't use Minikube, please refer to the https://github.com/GoogleCo
 
 === Clustered app headless service
 
-On Kubernetes, Infinispan shouldn't use the `tcp` transport stack because most often IP multicast is not available.
+On Kubernetes, Infinispan shouldn't use the default networking stack because most often IP multicast is not available.
 
-Instead, it provides a `kubernetes` stack that relies on https://kubernetes.io/docs/concepts/services-networking/service/#headless-services[headless service] lookup for discovery and TCP connections for group messaging:
-
-ifdef::env-github[]
-link:backend/src/main/resources/infinispan-kubernetes.xml[Infinispan Kubernetes]
-endif::env-github[]
-ifndef::env-github[]
-[source,java,role="collapsed"]
-.XML `backend/src/main/resources/infinispan-kubernetes.xml`
-----
-include::backend/src/main/resources/infinispan-kubernetes.xml[]
-----
-endif::env-github[]
+Instead, we will configure it to use a stack that relies on https://kubernetes.io/docs/concepts/services-networking/service/#headless-services[headless service] lookup for discovery and TCP connections for group messaging.
 
 Let's create a `clustered-app` headless service which selects member pods having the label `cluster:clustered-app`:
 
@@ -448,7 +420,7 @@ We want at least two replicas for high availability.
 To configure Vert.x Infinispan, we need to start the JVM with a few system properties:
 
 * `java.net.preferIPv4Stack`
-* `vertx.infinispan.config`: alternative Infinispan configuration file with `kubernetes` transport stack
+* `vertx.jgroups.config`: networking stack configuration file, set to `default-configs/default-jgroups-kubernetes.xml`
 * `jgroups.dns.query`: the DNS name of the headless service we just created
 
 And then Kubernetes needs to know the URI for liveness, readiness and startup probes.

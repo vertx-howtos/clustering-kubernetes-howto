@@ -8,7 +8,7 @@ repositories {
   mavenCentral()
 }
 
-val vertxVersion = "4.0.0-milestone5"
+val vertxVersion = "4.0.0"
 val verticle = "io.vertx.howtos.cluster.FrontendVerticle"
 
 dependencies {
