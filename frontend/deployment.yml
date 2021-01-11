@@ -21,7 +21,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: JAVA_TOOL_OPTIONS
-              value: "-Djava.net.preferIPv4Stack=true -Dvertx.infinispan.config=infinispan-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"
+              value: "-Djava.net.preferIPv4Stack=true -Dvertx.jgroups.config=default-configs/default-jgroups-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"
             - name: HTTP_PORT
               value: "8080"
           ports:
