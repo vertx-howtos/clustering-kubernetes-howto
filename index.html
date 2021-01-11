@@ -201,7 +201,7 @@ In Vert.x a cluster manager is used for various functions. In particular it prov
       <span style="color: #000080">&lt;dependency&gt;</span>
         <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
         <span style="color: #000080">&lt;artifactId&gt;</span>vertx-stack-depchain<span style="color: #000080">&lt;/artifactId&gt;</span>
-        <span style="color: #000080">&lt;version&gt;</span>4.0.0-milestone5<span style="color: #000080">&lt;/version&gt;</span>
+        <span style="color: #000080">&lt;version&gt;</span>4.0.0<span style="color: #000080">&lt;/version&gt;</span>
         <span style="color: #000080">&lt;type&gt;</span>pom<span style="color: #000080">&lt;/type&gt;</span>
         <span style="color: #000080">&lt;scope&gt;</span>import<span style="color: #000080">&lt;/scope&gt;</span>
       <span style="color: #000080">&lt;/dependency&gt;</span>
@@ -294,7 +294,7 @@ In Vert.x a cluster manager is used for various functions. In particular it prov
       <span style="color: #000080">&lt;dependency&gt;</span>
         <span style="color: #000080">&lt;groupId&gt;</span>io.vertx<span style="color: #000080">&lt;/groupId&gt;</span>
         <span style="color: #000080">&lt;artifactId&gt;</span>vertx-stack-depchain<span style="color: #000080">&lt;/artifactId&gt;</span>
-        <span style="color: #000080">&lt;version&gt;</span>4.0.0-milestone5<span style="color: #000080">&lt;/version&gt;</span>
+        <span style="color: #000080">&lt;version&gt;</span>4.0.0<span style="color: #000080">&lt;/version&gt;</span>
         <span style="color: #000080">&lt;type&gt;</span>pom<span style="color: #000080">&lt;/type&gt;</span>
         <span style="color: #000080">&lt;scope&gt;</span>import<span style="color: #000080">&lt;/scope&gt;</span>
       <span style="color: #000080">&lt;/dependency&gt;</span>
@@ -378,7 +378,7 @@ In Vert.x a cluster manager is used for various functions. In particular it prov
   <span style="color: #990000;font-weight: bold">mavenCentral</span><span style="background-color: #f8f8f8">()</span>
 <span style="background-color: #f8f8f8">}</span>
 
-<span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">vertxVersion</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"4.0.0-milestone5"</span>
+<span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">vertxVersion</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"4.0.0"</span>
 <span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">verticle</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"io.vertx.howtos.cluster.FrontendVerticle"</span>
 
 <span style="color: #990000;font-weight: bold">dependencies</span> <span style="background-color: #f8f8f8">{</span>
@@ -424,7 +424,7 @@ In Vert.x a cluster manager is used for various functions. In particular it prov
   <span style="color: #990000;font-weight: bold">mavenCentral</span><span style="background-color: #f8f8f8">()</span>
 <span style="background-color: #f8f8f8">}</span>
 
-<span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">vertxVersion</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"4.0.0-milestone5"</span>
+<span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">vertxVersion</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"4.0.0"</span>
 <span style="color: #000000;font-weight: bold">val</span> <span style="background-color: #f8f8f8">verticle</span> <span style="background-color: #f8f8f8">=</span> <span style="color: #d14">"io.vertx.howtos.cluster.BackendVerticle"</span>
 
 <span style="color: #990000;font-weight: bold">dependencies</span> <span style="background-color: #f8f8f8">{</span>
@@ -555,33 +555,8 @@ Vert.x Infinispan provides a cluster health check out of the box.
 </div>
 </div>
 <div class="paragraph">
-<p>On startup, Vert.x Infinispan searches for an <code>infinispan.xml</code> file in the classpath or in the current working directory.</p>
-</div>
-<div class="paragraph">
-<p>In this project, the configuration file sets the Infinispan transport stack to <code>tcp</code>.
-This network stack combines IP multicast for discovery and TCP connections for group messaging:</p>
-</div>
-<div class="listingblock collapsed">
-<div class="title">XML <code>backend/src/main/resources/infinispan.xml</code></div>
-<div class="content">
-<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java"><span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">infinispan</span> <span style="color: #990000;font-weight: bold">xmlns:</span><span style="background-color: #f8f8f8">xsi</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"http://www.w3.org/2001/XMLSchema-instance"</span>
-            <span style="color: #990000;font-weight: bold">xsi:</span><span style="background-color: #f8f8f8">schemaLocation</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"urn:infinispan:config:10.1 http://www.infinispan.org/schemas/infinispan-config-10.1.xsd"</span>
-            <span style="background-color: #f8f8f8">xmlns</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"urn:infinispan:config:10.1"</span><span style="color: #000000;font-weight: bold">&gt;</span>
-
-  <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">container</span> <span style="color: #000000;font-weight: bold">default</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"distributed-cache"</span><span style="color: #000000;font-weight: bold">&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">transport</span> <span style="background-color: #f8f8f8">stack</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"tcp"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">distributed</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"distributed-cache"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.subs"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.haInfo"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.nodeInfo"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">distributed</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">configuration</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.distributed.cache.configuration"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-  <span style="color: #000000;font-weight: bold">&lt;/</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">container</span><span style="color: #000000;font-weight: bold">&gt;</span>
-
-<span style="color: #000000;font-weight: bold">&lt;/</span><span style="background-color: #f8f8f8">infinispan</span><span style="color: #000000;font-weight: bold">&gt;</span></code></pre>
-</div>
-</div>
-<div class="paragraph">
-<p>The <code>tcp</code> stack is fine for testing on our development machine.
+<p>On startup, Vert.x Infinispan uses the default networking stack which combines IP multicast for discovery and TCP connections for group messaging.
+This networking stack is fine for testing on our development machine.
 We will see later on how to switch to a stack that is suitable when deploying to Kubernetes.</p>
 </div>
 </div>
@@ -661,9 +636,6 @@ We will see later on how to switch to a stack that is suitable when deploying to
       <span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">onFailure</span><span style="color: #000000;font-weight: bold">(</span><span style="background-color: #f8f8f8">t</span> <span style="color: #000000;font-weight: bold">-&gt;</span> <span style="background-color: #f8f8f8">t</span><span style="color: #000000;font-weight: bold">.</span><span style="color: #008080">printStackTrace</span><span style="color: #000000;font-weight: bold">());</span>
   <span style="color: #000000;font-weight: bold">}</span></code></pre>
 </div>
-</div>
-<div class="paragraph">
-<p>The <em>frontend</em> project, like the <em>backend</em> project, contains an <code>infinispan.xml</code> in the <code>src/main/resources</code> directory that is suitable for testing on the development machine.</p>
 </div>
 </div>
 <div class="sect2">
@@ -874,29 +846,10 @@ If you don&#8217;t use Minikube, please refer to the <a href="https://github.com
 <div class="sect2">
 <h3 id="clustered-app-headless-service">Clustered app headless service</h3>
 <div class="paragraph">
-<p>On Kubernetes, Infinispan shouldn&#8217;t use the <code>tcp</code> transport stack because most often IP multicast is not available.</p>
+<p>On Kubernetes, Infinispan shouldn&#8217;t use the default networking stack because most often IP multicast is not available.</p>
 </div>
 <div class="paragraph">
-<p>Instead, it provides a <code>kubernetes</code> stack that relies on <a href="https://kubernetes.io/docs/concepts/services-networking/service/#headless-services">headless service</a> lookup for discovery and TCP connections for group messaging:</p>
-</div>
-<div class="listingblock collapsed">
-<div class="title">XML <code>backend/src/main/resources/infinispan-kubernetes.xml</code></div>
-<div class="content">
-<pre class="rouge highlight" style="background-color: #f8f8f8"><code data-lang="java"><span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">infinispan</span> <span style="color: #990000;font-weight: bold">xmlns:</span><span style="background-color: #f8f8f8">xsi</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"http://www.w3.org/2001/XMLSchema-instance"</span>
-            <span style="color: #990000;font-weight: bold">xsi:</span><span style="background-color: #f8f8f8">schemaLocation</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"urn:infinispan:config:10.1 http://www.infinispan.org/schemas/infinispan-config-10.1.xsd"</span>
-            <span style="background-color: #f8f8f8">xmlns</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"urn:infinispan:config:10.1"</span><span style="color: #000000;font-weight: bold">&gt;</span>
-
-  <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">container</span> <span style="color: #000000;font-weight: bold">default</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"distributed-cache"</span><span style="color: #000000;font-weight: bold">&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">transport</span> <span style="background-color: #f8f8f8">stack</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"kubernetes"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">distributed</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"distributed-cache"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.subs"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.haInfo"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">replicated</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.nodeInfo"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-    <span style="color: #000000;font-weight: bold">&lt;</span><span style="background-color: #f8f8f8">distributed</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">configuration</span> <span style="background-color: #f8f8f8">name</span><span style="color: #000000;font-weight: bold">=</span><span style="color: #d14">"__vertx.distributed.cache.configuration"</span><span style="color: #000000;font-weight: bold">/&gt;</span>
-  <span style="color: #000000;font-weight: bold">&lt;/</span><span style="background-color: #f8f8f8">cache</span><span style="color: #000000;font-weight: bold">-</span><span style="background-color: #f8f8f8">container</span><span style="color: #000000;font-weight: bold">&gt;</span>
-
-<span style="color: #000000;font-weight: bold">&lt;/</span><span style="background-color: #f8f8f8">infinispan</span><span style="color: #000000;font-weight: bold">&gt;</span></code></pre>
-</div>
+<p>Instead, we will configure it to use a stack that relies on <a href="https://kubernetes.io/docs/concepts/services-networking/service/#headless-services">headless service</a> lookup for discovery and TCP connections for group messaging.</p>
 </div>
 <div class="paragraph">
 <p>Let&#8217;s create a <code>clustered-app</code> headless service which selects member pods having the label <code>cluster:clustered-app</code>:</p>
@@ -974,7 +927,7 @@ clustered-app   ClusterIP   None         &lt;none&gt;        7800/TCP   63m</pre
 <p><code>java.net.preferIPv4Stack</code></p>
 </li>
 <li>
-<p><code>vertx.infinispan.config</code>: alternative Infinispan configuration file with <code>kubernetes</code> transport stack</p>
+<p><code>vertx.jgroups.config</code>: networking stack configuration file, set to <code>default-configs/default-jgroups-kubernetes.xml</code></p>
 </li>
 <li>
 <p><code>jgroups.dns.query</code>: the DNS name of the headless service we just created</p>
@@ -1022,7 +975,7 @@ The startup probe can point to the readiness URI with different timeout settings
           <span style="color: #990000;font-weight: bold">imagePullPolicy:</span> <span style="color: #445588;font-weight: bold">IfNotPresent</span>
           <span style="color: #990000;font-weight: bold">env:</span>
             <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">JAVA_TOOL_OPTIONS</span>
-              <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"-Djava.net.preferIPv4Stack=true -Dvertx.infinispan.config=infinispan-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"</span>
+              <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"-Djava.net.preferIPv4Stack=true -Dvertx.jgroups.config=default-configs/default-jgroups-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"</span>
             <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">HTTP_PORT</span>
               <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"8080"</span>
           <span style="color: #990000;font-weight: bold">ports:</span>
@@ -1224,7 +1177,7 @@ If you don&#8217;t use Minikube and no external IP has been assigned to your ser
           <span style="color: #990000;font-weight: bold">imagePullPolicy:</span> <span style="color: #445588;font-weight: bold">IfNotPresent</span>
           <span style="color: #990000;font-weight: bold">env:</span>
             <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">JAVA_TOOL_OPTIONS</span>
-              <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"-Djava.net.preferIPv4Stack=true -Dvertx.infinispan.config=infinispan-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"</span>
+              <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"-Djava.net.preferIPv4Stack=true -Dvertx.jgroups.config=default-configs/default-jgroups-kubernetes.xml -Djgroups.dns.query=clustered-app.default.svc.cluster.local"</span>
             <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">HTTP_PORT</span>
               <span style="color: #990000;font-weight: bold">value:</span> <span style="color: #d14">"8080"</span>
             <span style="color: #000000;font-weight: bold">-</span> <span style="color: #990000;font-weight: bold">name:</span> <span style="color: #008080">POD_NAME</span>
@@ -1462,7 +1415,7 @@ Hello Vert.x Clustering from backend-deployment-74d7f45c67-6r2g2</pre>
   <div class="row">
     <div class="col">
       <hr>
-      <p><small>Last published: 2021-01-11 16:05:12 +0000.</small></p>
+      <p><small>Last published: 2021-01-11 21:52:11 +0000.</small></p>
     </div>
   </div>
 </div>
