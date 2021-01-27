@@ -3,7 +3,7 @@
 :page-github: vertx-howtos/clustering-kubernetes-howto
 
 ifdef::env-github[]
-image:https://travis-ci.org/vertx-howtos/clustering-kubernetes-howto.svg?branch=master["Build Status", link="https://travis-ci.org/vertx-howtos/clustering-kubernetes-howto"]
+image:https://github.com/vertx-howtos/clustering-kubernetes-howto/workflows/Publish%20the%20how-to/badge.svg?branch=master["Build Status", link="https://github.com/vertx-howtos/clustering-kubernetes-howto/actions?query=workflow%3A%22Publish+the+how-to%22"]
 endif::env-github[]
 
 This document will show you how to deploy clustered Vert.x apps on Kubernetes with Infinispan.
@@ -509,7 +509,7 @@ frontend   LoadBalancer   10.100.254.64   10.100.254.64   80:30660/TCP   30m
 TIP: Take note of the external IP.
 
 [IMPORTANT]
-==== 
+====
 Minikube tunnel requires privilege escalation.
 If you are not granted to do this, you can still access the service via the _NodePort_ with `minikube service --url frontend`.
 ====
