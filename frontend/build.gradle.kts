@@ -8,18 +8,21 @@ repositories {
   mavenCentral()
 }
 
-val vertxVersion = "4.0.0"
+val vertxVersion = "5.0.0.CR2"
 val verticle = "io.vertx.howtos.cluster.FrontendVerticle"
 
 dependencies {
+  implementation("io.vertx:vertx-launcher-application:${vertxVersion}")
   implementation("io.vertx:vertx-web:${vertxVersion}")
   implementation("io.vertx:vertx-infinispan:${vertxVersion}")
   implementation("io.vertx:vertx-health-check:${vertxVersion}")
-  implementation("ch.qos.logback:logback-classic:1.2.3")
+  implementation("ch.qos.logback:logback-classic:1.5.12")
 }
 
 application {
-  mainClassName = verticle
+  applicationDefaultJvmArgs =
+    listOf("-Djava.net.preferIPv4Stack=true", "-Dvertx.jgroups.config=default-configs/default-jgroups-udp.xml")
+  mainClass = verticle
 }
 
 jib {
@@ -27,12 +30,8 @@ jib {
     image = "clustering-kubernetes/frontend"
   }
   container {
-    mainClass = "io.vertx.core.Launcher"
-    args = listOf("run", verticle, "-cluster")
+    mainClass = "io.vertx.launcher.application.VertxApplication"
+    args = listOf(verticle, "-cluster")
     ports = listOf("8080", "7800")
   }
-}
-
-tasks.wrapper {
-  gradleVersion = "5.2"
 }

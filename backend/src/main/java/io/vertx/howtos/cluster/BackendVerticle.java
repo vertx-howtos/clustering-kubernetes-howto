@@ -1,15 +1,16 @@
 package io.vertx.howtos.cluster;
 
 import io.vertx.core.*;
+import io.vertx.core.http.HttpServer;
 import io.vertx.ext.cluster.infinispan.ClusterHealthCheck;
-import io.vertx.ext.healthchecks.HealthCheckHandler;
 import io.vertx.ext.healthchecks.HealthChecks;
 import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.healthchecks.HealthCheckHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class BackendVerticle extends AbstractVerticle {
+public class BackendVerticle extends VerticleBase {
 
   private static final Logger log = LoggerFactory.getLogger(BackendVerticle.class);
 
@@ -20,23 +21,25 @@ public class BackendVerticle extends AbstractVerticle {
 
   // tag::start[]
   @Override
-  public void start() {
-    registerConsumer();
+  public Future<?> start() {
+    Future<Void> registration = registerConsumer();
 
     Router router = setupRouter();
 
-    vertx.createHttpServer()
+    Future<HttpServer> httpServer = vertx.createHttpServer()
       .requestHandler(router)
       .listen(HTTP_PORT)
       .onSuccess(server -> log.info("Server started and listening on port {}", server.actualPort()));
+
+    return Future.join(registration, httpServer);
   }
   // end::start[]
 
   // tag::consumer[]
-  private void registerConsumer() {
-    vertx.eventBus().<String>consumer("greetings", msg -> {
+  private Future<Void> registerConsumer() {
+    return vertx.eventBus().<String>consumer("greetings", msg -> {
       msg.reply(String.format("Hello %s from %s", msg.body(), POD_NAME));
-    });
+    }).completion();
   }
   // end::consumer[]
 
@@ -57,7 +60,7 @@ public class BackendVerticle extends AbstractVerticle {
   public static void main(String[] args) {
     Vertx.clusteredVertx(new VertxOptions())
       .compose(vertx -> vertx.deployVerticle(new BackendVerticle()))
-      .onFailure(Throwable::printStackTrace);
+      .await();
   }
   // end::main[]
 }

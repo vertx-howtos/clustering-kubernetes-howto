@@ -3,15 +3,15 @@ package io.vertx.howtos.cluster;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.Message;
 import io.vertx.ext.cluster.infinispan.ClusterHealthCheck;
-import io.vertx.ext.healthchecks.HealthCheckHandler;
 import io.vertx.ext.healthchecks.HealthChecks;
 import io.vertx.ext.healthchecks.Status;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.healthchecks.HealthCheckHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class FrontendVerticle extends AbstractVerticle {
+public class FrontendVerticle extends VerticleBase {
 
   private static final Logger log = LoggerFactory.getLogger(FrontendVerticle.class);
 
@@ -21,12 +21,12 @@ public class FrontendVerticle extends AbstractVerticle {
 
   // tag::start[]
   @Override
-  public void start() {
+  public Future<?> start() {
     Router router = Router.router(vertx);
 
     setupRouter(router);
 
-    vertx.createHttpServer()
+    return vertx.createHttpServer()
       .requestHandler(router)
       .listen(HTTP_PORT)
       .onSuccess(server -> log.info("Server started and listening on port {}", server.actualPort()));
@@ -58,7 +58,7 @@ public class FrontendVerticle extends AbstractVerticle {
   public static void main(String[] args) {
     Vertx.clusteredVertx(new VertxOptions())
       .compose(vertx -> vertx.deployVerticle(new FrontendVerticle()))
-      .onFailure(t -> t.printStackTrace());
+      .await();
   }
   // end::main[]
 }

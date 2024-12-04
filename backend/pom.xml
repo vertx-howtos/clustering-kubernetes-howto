@@ -9,8 +9,6 @@
   <version>1.0-SNAPSHOT</version>
 
   <properties>
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <maven.compiler.target>1.8</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <verticle>io.vertx.howtos.cluster.BackendVerticle</verticle>
   </properties>
@@ -20,7 +18,7 @@
       <dependency>
         <groupId>io.vertx</groupId>
         <artifactId>vertx-stack-depchain</artifactId>
-        <version>4.0.0</version>
+        <version>5.0.0.CR2</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -28,6 +26,10 @@
   </dependencyManagement>
 
   <dependencies>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-launcher-application</artifactId>
+    </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-web</artifactId>
@@ -43,17 +45,35 @@
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-      <version>1.2.3</version>
+      <version>1.5.12</version>
     </dependency>
   </dependencies>
 
   <build>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <release>11</release>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
-        <version>1.5.0</version>
+        <version>3.5.0</version>
         <configuration>
+          <systemProperties>
+            <systemProperty>
+              <key>java.net.preferIPv4Stack</key>
+              <value>true</value>
+            </systemProperty>
+            <systemProperty>
+              <key>vertx.jgroups.config</key>
+              <value>default-configs/default-jgroups-udp.xml</value>
+            </systemProperty>
+          </systemProperties>
           <mainClass>${verticle}</mainClass>
         </configuration>
       </plugin>
@@ -66,9 +86,8 @@
             <image>clustering-kubernetes/backend</image>
           </to>
           <container>
-            <mainClass>io.vertx.core.Launcher</mainClass>
+            <mainClass>io.vertx.launcher.application.VertxApplication</mainClass>
             <args>
-              <arg>run</arg>
               <arg>${verticle}</arg>
               <arg>-cluster</arg>
             </args>

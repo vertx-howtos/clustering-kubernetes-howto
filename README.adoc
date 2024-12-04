@@ -27,7 +27,7 @@ The _backend_ consumes messages sent to the `greetings` address, generates a gre
 == What you need
 
 * A text editor or IDE
-* Java 8 higher
+* Java 11 higher
 * Maven or Gradle
 * https://kubernetes.io/docs/tasks/tools/install-minikube/[Minikube] or any Kubernetes cluster
 * `kubectl` command-line tool
@@ -46,7 +46,8 @@ Both projects depend on:
 * https://vertx.io/docs/vertx-health-check/java[`Vert.x Health Check`]
 
 Vert.x Infinispan is a cluster manager for Vert.x based on the https://infinispan.org/[Infinispan] in-memory key/value data store.
-In Vert.x a cluster manager is used for various functions. In particular it provides discovery/membership of cluster nodes and stores _event bus_ subscription data.
+In Vert.x a cluster manager is used for various functions.
+In particular, it provides discovery/membership of cluster nodes and stores _event bus_ subscription data.
 
 Vert.x Web is a set of building blocks which make it easy to create HTTP applications.
 
@@ -286,7 +287,7 @@ The _backend_:
 ----
 
 TIP: Take note of the `backend` HTTP server port.
-By default it uses a random port to avoid conflict with the `frontend` HTTP server.
+By default, it uses a random port to avoid conflict with the `frontend` HTTP server.
 
 NOTE: The following examples use the https://httpie.org/[HTTPie] command line HTTP client.
 Please refer to the https://httpie.org/doc#installation[installation] documentation if you don't have it installed on your system yet.
@@ -358,6 +359,7 @@ There are https://minikube.sigs.k8s.io/docs/handbook/pushing/[different ways] to
 In this document, we will push directly to the in-cluster Docker daemon.
 To do so, we must point our shell to Minikube's docker-daemon:
 
+[source,shell]
 ----
 eval $(minikube -p minikube docker-env)
 ----
@@ -394,12 +396,14 @@ IMPORTANT: The headless service must account for pods even when not ready (`publ
 
 Apply this configuration:
 
+[source,shell]
 ----
 kubectl apply -f headless-service.yml
 ----
 
-Then verify it was succesful:
+Then verify it was successful:
 
+[source,shell]
 ----
 kubectl get services clustered-app
 ----
@@ -440,12 +444,14 @@ endif::env-github[]
 
 Apply this configuration:
 
+[source,shell]
 ----
 kubectl apply -f frontend/deployment.yml
 ----
 
 Verify the pods have started successfully:
 
+[source,shell]
 ----
 kubectl get pods
 ----
@@ -474,12 +480,14 @@ endif::env-github[]
 
 Apply this configuration:
 
+[source,shell]
 ----
 kubectl apply -f frontend/service.yml
 ----
 
 Verify the service has been created successfully:
 
+[source,shell]
 ----
 kubectl get services frontend
 ----
@@ -493,6 +501,7 @@ frontend   LoadBalancer   10.106.16.88   <pending>     80:30729/TCP   62s
 
 If you use Minikube, open another terminal window and run:
 
+[source,shell]
 ----
 minikube tunnel
 ----
@@ -539,12 +548,14 @@ endif::env-github[]
 
 Apply this configuration:
 
+[source,shell]
 ----
 kubectl apply -f backend/deployment.yml
 ----
 
 Verify the pods have started successfully:
 
+[source,shell]
 ----
 kubectl get pods
 ----
